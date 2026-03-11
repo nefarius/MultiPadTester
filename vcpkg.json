@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "multi-pad-tester",
+  "version-string": "0.1.0",
+  "description": "Gamepad/controller tester and visualizer using ImGui and DirectX 11",
+  "dependencies": [
+    {
+      "name": "imgui",
+      "features": [
+        "docking-experimental",
+        "dx11-binding",
+        "win32-binding"
+      ]
+    }
+  ]
+}

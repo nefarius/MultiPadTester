@@ -1,0 +1,64 @@
+name: Build and Upload to Buildbot
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Bootstrap vcpkg
+        run: vcpkg/bootstrap-vcpkg.bat
+
+      - name: Configure
+        run: cmake --preset default
+
+      - name: Build Release
+        run: cmake --build --preset release
+
+      - name: Upload artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}
+          path: build/Release/**
+
+      - name: Send webhook
+        shell: bash
+        run: |
+          artifact_name="${{ github.event.repository.name }}"
+          artifact_id="${{ steps.upload.outputs.artifact-id }}"
+          artifact_url="https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${artifact_id}/zip"
+
+          payload=$(jq -n \
+            --arg fileName "${artifact_name}.zip" \
+            --arg url "$artifact_url" \
+            --arg projectName "${{ github.event.repository.name }}" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg buildVersion "${{ github.ref_name }}" \
+            '{
+              artifacts: [
+                {
+                  fileName: $fileName,
+                  url: $url
+                }
+              ],
+              environmentVariables: {
+                appveyor_project_name: $projectName,
+                appveyor_repo_branch: $branch,
+                appveyor_build_version: $buildVersion
+              }
+            }')
+
+          curl -X POST "${{ secrets.WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Token: ${{ secrets.GITHUB_TOKEN }}" \
+            -d "$payload"
