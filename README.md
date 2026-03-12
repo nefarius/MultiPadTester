@@ -18,6 +18,13 @@ MultiPad Tester is a self-contained C++23 Windows desktop application for testin
 - **Tabbed UI** &mdash; Each backend gets its own tab with a live connected-device count, so you can compare how different APIs see the same hardware.
 - **Self-contained** &mdash; Single Win32 executable, no runtime dependencies beyond the operating system.
 
+## Configuration
+
+Settings are stored in an INI file so they persist across runs. You can change them via the **Preferences** and **About** entries in the window title bar’s system menu (right-click the title bar).
+
+- **Location** &mdash; `%APPDATA%\MultiPadTester\config.ini` (the folder is created on first run if needed).
+- **Contents** &mdash; Refresh rate (60 / 75 / 120 / 144 Hz or monitor default), VSync on/off, and the last window position and size. If a saved position would place the window on a monitor that no longer exists, the app falls back to the default position on startup.
+
 ## How to build
 
 ### Prerequisites
