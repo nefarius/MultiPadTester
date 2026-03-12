@@ -29,6 +29,10 @@ struct AppPrefs
 {
 	int refreshRate = 60;  // 0 = monitor default
 	bool vsync = true;
+	int windowX = 0;
+	int windowY = 0;
+	int windowW = 0;  // 0 = use default position/size
+	int windowH = 0;
 };
 
 static std::wstring GetConfigPath()
@@ -85,7 +89,26 @@ static void LoadConfig(AppPrefs& prefs)
 		{
 			prefs.vsync = (val == "1" || val == "true" || val == "yes");
 		}
+		else if (key == "WindowX")
+		{
+			try { prefs.windowX = std::stoi(val); } catch (...) {}
+		}
+		else if (key == "WindowY")
+		{
+			try { prefs.windowY = std::stoi(val); } catch (...) {}
+		}
+		else if (key == "WindowW")
+		{
+			try { prefs.windowW = std::stoi(val); } catch (...) {}
+		}
+		else if (key == "WindowH")
+		{
+			try { prefs.windowH = std::stoi(val); } catch (...) {}
+		}
 	}
+	// Treat invalid dimensions as "not set"
+	if (prefs.windowW <= 0 || prefs.windowH <= 0)
+		prefs.windowW = prefs.windowH = 0;
 }
 
 static void SaveConfig(const AppPrefs& prefs)
@@ -99,6 +122,21 @@ static void SaveConfig(const AppPrefs& prefs)
 	f << "[Settings]\n";
 	f << "RefreshRate=" << prefs.refreshRate << "\n";
 	f << "VSync=" << (prefs.vsync ? "1" : "0") << "\n";
+	f << "WindowX=" << prefs.windowX << "\n";
+	f << "WindowY=" << prefs.windowY << "\n";
+	f << "WindowW=" << prefs.windowW << "\n";
+	f << "WindowH=" << prefs.windowH << "\n";
+}
+
+static bool IsWindowRectPlausible(int x, int y, int w, int h)
+{
+	constexpr int minSize = 320, maxSize = 4096;
+	if (w < minSize || w > maxSize || h < minSize || h > maxSize)
+		return false;
+	POINT pt = {x, y};
+	if (MonitorFromPoint(pt, MONITOR_DEFAULTTONULL) == nullptr)
+		return false;
+	return true;
 }
 
 static void GetMonitorRefreshRate(HWND hwnd, int& numerator, int& denominator)
@@ -159,6 +197,17 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			return 0;
 		break;
 	case WM_DESTROY:
+		{
+			RECT r;
+			if (GetWindowRect(hWnd, &r))
+			{
+				g_prefs.windowX = r.left;
+				g_prefs.windowY = r.top;
+				g_prefs.windowW = r.right - r.left;
+				g_prefs.windowH = r.bottom - r.top;
+				SaveConfig(g_prefs);
+			}
+		}
 		PostQuitMessage(0);
 		return 0;
 	}
@@ -183,18 +232,29 @@ int APIENTRY wWinMain(
 	wc.lpszClassName = _T("MultiPadTesterClass");
 	RegisterClassEx(&wc);
 
+	LoadConfig(g_prefs);
+
+	constexpr int defaultX = 100, defaultY = 100, defaultW = 1024, defaultH = 700;
+	int x = defaultX, y = defaultY, w = defaultW, h = defaultH;
+	if (g_prefs.windowW > 0 && g_prefs.windowH > 0 &&
+	    IsWindowRectPlausible(g_prefs.windowX, g_prefs.windowY, g_prefs.windowW, g_prefs.windowH))
+	{
+		x = g_prefs.windowX;
+		y = g_prefs.windowY;
+		w = g_prefs.windowW;
+		h = g_prefs.windowH;
+	}
+
 	HWND hwnd = CreateWindow(
 		wc.lpszClassName, _T("MultiPad Tester"),
 		WS_OVERLAPPEDWINDOW,
-		100, 100, 1024, 700,
+		x, y, w, h,
 		nullptr, nullptr, wc.hInstance, nullptr);
 
 	HMENU sysMenu = GetSystemMenu(hwnd, FALSE);
 	AppendMenuW(sysMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(sysMenu, MF_STRING, IDM_ABOUT, L"About...");
 	AppendMenuW(sysMenu, MF_STRING, IDM_PREFERENCES, L"Preferences...");
-
-	LoadConfig(g_prefs);
 	if (!g_d3d.Create(hwnd, g_prefs.refreshRate))
 	{
 		g_d3d.Cleanup();
