@@ -357,6 +357,11 @@ int APIENTRY wWinMain(
 			                     ImGuiWindowFlags_NoResize))
 			{
 				ImGui::Text("MultiPad Tester");
+				ImGui::TextWrapped("Gamepad/controller tester and visualizer for Windows, supporting multiple input APIs.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries four different input backends in parallel and renders a real-time gamepad visualization for every connected controller using Dear ImGui and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.");
+				ImGui::Spacing();
+				ImGui::Text("Copyright (c) 2026 Benjamin Höglinger-Stelzer");
 				ImGui::Spacing();
 				if (ImGui::Button("Open GitHub repository"))
 					ShellExecuteW(nullptr, L"open", L"https://github.com/nefarius/MultiPadTester",
