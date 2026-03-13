@@ -1,7 +1,6 @@
 # <img src="assets/RetroPad_128x128.png" align="left" />MultiPad Tester
 
 [![Build status](https://img.shields.io/github/actions/workflow/status/nefarius/MultiPadTester/build.yml)](https://github.com/nefarius/MultiPadTester/actions)
-[![GitHub Release](https://img.shields.io/github/v/release/nefarius/MultiPadTester)](../../releases/)
 [![Discord](https://img.shields.io/discord/346756263763378176.svg)](https://discord.nefarius.at/)
 [![Mastodon Follow](https://img.shields.io/mastodon/follow/109321120351128938?domain=https%3A%2F%2Ffosstodon.org%2F)](https://fosstodon.org/@Nefarius)
 [![Assisted by Cursor AI](https://img.shields.io/badge/Assisted%20by-Cursor%20AI-8B5CF6?style=flat)](https://cursor.com/)
