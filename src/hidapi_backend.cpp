@@ -202,8 +202,8 @@ bool HidApiBackend::OpenAndSetup(const wchar_t* path, DeviceInfo& info)
 	attrs.Size = sizeof(attrs);
 	if (HidD_GetAttributes(h, &attrs))
 	{
-		info.vendorId = static_cast<uint16_t>(attrs.VendorID);
-		info.productId = static_cast<uint16_t>(attrs.ProductID);
+		info.vendorId = attrs.VendorID;
+		info.productId = attrs.ProductID;
 	}
 
 	PHIDP_PREPARSED_DATA pp = nullptr;
