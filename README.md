@@ -7,6 +7,10 @@
 
 Gamepad/controller tester and visualizer for Windows, supporting multiple input APIs.
 
+## Download
+
+**[Latest build](https://buildbot.nefarius.at/builds/MultiPadTester/latest/MultiPadTester.zip)** &mdash; Pre-built ZIP from the build bot (no build step required).
+
 ## About
 
 MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries four different input backends in parallel and renders a real-time gamepad visualization for every connected controller using [Dear ImGui](https://github.com/ocornut/imgui) and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.
