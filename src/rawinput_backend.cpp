@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <ranges>
 #include <utility>
+#include <hidusage.h>
+
 
 // ── public interface ─────────────────────────────────────────
 
@@ -11,12 +13,12 @@ void RawInputBackend::Init(HWND hwnd)
 	hwnd_ = hwnd;
 
 	RAWINPUTDEVICE rid[2]{};
-	rid[0].usUsagePage = 0x01;
-	rid[0].usUsage = 0x05; // Gamepad
+	rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC;
+	rid[0].usUsage = HID_USAGE_GENERIC_GAMEPAD;
 	rid[0].dwFlags = RIDEV_DEVNOTIFY | RIDEV_INPUTSINK;
 	rid[0].hwndTarget = hwnd;
-	rid[1].usUsagePage = 0x01;
-	rid[1].usUsage = 0x04; // Joystick
+	rid[1].usUsagePage = HID_USAGE_PAGE_GENERIC;
+	rid[1].usUsage = HID_USAGE_GENERIC_JOYSTICK;
 	rid[1].dwFlags = RIDEV_DEVNOTIFY | RIDEV_INPUTSINK;
 	rid[1].hwndTarget = hwnd;
 
@@ -77,8 +79,8 @@ bool RawInputBackend::IsGamepadOrJoystick(HANDLE h)
 	if (GetRawInputDeviceInfo(h, RIDI_DEVICEINFO, &info, &sz) == static_cast<UINT>(-1))
 		return false;
 	if (info.dwType != RIM_TYPEHID) return false;
-	return info.hid.usUsagePage == 0x01 &&
-		(info.hid.usUsage == 0x04 || info.hid.usUsage == 0x05);
+	return info.hid.usUsagePage == HID_USAGE_PAGE_GENERIC &&
+		(info.hid.usUsage == HID_USAGE_GENERIC_JOYSTICK || info.hid.usUsage == HID_USAGE_GENERIC_GAMEPAD);
 }
 
 bool RawInputBackend::SetupDevice(HANDLE h, DeviceInfo& d)
@@ -89,7 +91,7 @@ bool RawInputBackend::SetupDevice(HANDLE h, DeviceInfo& d)
 	devInfo.cbSize = sizeof(devInfo);
 	UINT devInfoSz = sizeof(devInfo);
 	if (GetRawInputDeviceInfo(h, RIDI_DEVICEINFO, &devInfo, &devInfoSz) != static_cast<UINT>(-1)
-	    && devInfo.dwType == RIM_TYPEHID)
+		&& devInfo.dwType == RIM_TYPEHID)
 	{
 		d.vendorId = static_cast<uint16_t>(devInfo.hid.dwVendorId);
 		d.productId = static_cast<uint16_t>(devInfo.hid.dwProductId);
@@ -206,12 +208,12 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 		uint16_t btns = 0;
 		const bool sony = IsSonyGamepad(dev.vendorId, dev.productId);
 
-		ULONG maxU = HidP_MaxUsageListLength(HidP_Input, 0x09, pp);
+		ULONG maxU = HidP_MaxUsageListLength(HidP_Input, HID_USAGE_PAGE_BUTTON, pp);
 		if (maxU > 0)
 		{
 			usageBuf_.resize(maxU);
 			ULONG cnt = maxU;
-			if (HidP_GetUsages(HidP_Input, 0x09, 0, usageBuf_.data(),
+			if (HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_BUTTON, 0, usageBuf_.data(),
 			                   &cnt, pp, report, rLen) == HIDP_STATUS_SUCCESS)
 			{
 				for (ULONG j = 0; j < cnt; ++j)
@@ -221,7 +223,7 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 
 		for (const auto& vc : dev.valueCaps)
 		{
-			if (vc.UsagePage != 0x01) continue;
+			if (vc.UsagePage != HID_USAGE_PAGE_GENERIC) continue;
 
 			const USAGE uMin = vc.IsRange ? vc.Range.UsageMin : vc.NotRange.Usage;
 			const USAGE uMax = vc.IsRange ? vc.Range.UsageMax : vc.NotRange.Usage;
@@ -229,7 +231,7 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 			for (USAGE u = uMin; u <= uMax; ++u)
 			{
 				ULONG val = 0;
-				if (HidP_GetUsageValue(HidP_Input, 0x01, 0, u,
+				if (HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, u,
 				                       &val, pp, report, rLen) != HIDP_STATUS_SUCCESS)
 					continue;
 
@@ -237,19 +239,19 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 				{
 					switch (u)
 					{
-					case 0x30: gs.leftStickX = NormStick(val, vc);
+					case HID_USAGE_GENERIC_X: gs.leftStickX = NormStick(val, vc);
 						break;
-					case 0x31: gs.leftStickY = -NormStick(val, vc);
+					case HID_USAGE_GENERIC_Y: gs.leftStickY = -NormStick(val, vc);
 						break;
-					case 0x32: gs.rightStickX = NormStick(val, vc);
+					case HID_USAGE_GENERIC_Z: gs.rightStickX = NormStick(val, vc);
 						break;
-					case 0x33: gs.leftTrigger = NormTrigger(val, vc);
+					case HID_USAGE_GENERIC_RX: gs.leftTrigger = NormTrigger(val, vc);
 						break;
-					case 0x34: gs.rightTrigger = NormTrigger(val, vc);
+					case HID_USAGE_GENERIC_RY: gs.rightTrigger = NormTrigger(val, vc);
 						break;
-					case 0x35: gs.rightStickY = -NormStick(val, vc);
+					case HID_USAGE_GENERIC_RZ: gs.rightStickY = -NormStick(val, vc);
 						break;
-					case 0x39: btns |= MapHat(val, vc);
+					case HID_USAGE_GENERIC_HATSWITCH: btns |= MapHat(val, vc);
 						break;
 					}
 				}
@@ -257,19 +259,19 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 				{
 					switch (u)
 					{
-					case 0x30: gs.leftStickX = NormStick(val, vc);
+					case HID_USAGE_GENERIC_X: gs.leftStickX = NormStick(val, vc);
 						break;
-					case 0x31: gs.leftStickY = -NormStick(val, vc);
+					case HID_USAGE_GENERIC_Y: gs.leftStickY = -NormStick(val, vc);
 						break;
-					case 0x32: gs.leftTrigger = NormTrigger(val, vc);
+					case HID_USAGE_GENERIC_Z: gs.leftTrigger = NormTrigger(val, vc);
 						break;
-					case 0x33: gs.rightStickX = NormStick(val, vc);
+					case HID_USAGE_GENERIC_RX: gs.rightStickX = NormStick(val, vc);
 						break;
-					case 0x34: gs.rightStickY = -NormStick(val, vc);
+					case HID_USAGE_GENERIC_RY: gs.rightStickY = -NormStick(val, vc);
 						break;
-					case 0x35: gs.rightTrigger = NormTrigger(val, vc);
+					case HID_USAGE_GENERIC_RZ: gs.rightTrigger = NormTrigger(val, vc);
 						break;
-					case 0x39: btns |= MapHat(val, vc);
+					case HID_USAGE_GENERIC_HATSWITCH: btns |= MapHat(val, vc);
 						break;
 					}
 				}
