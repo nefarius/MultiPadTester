@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <ranges>
 #include <utility>
+#include <hidusage.h>
 
 // ── lifecycle ────────────────────────────────────────────────
 
@@ -321,12 +322,12 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 	uint16_t btns = 0;
 	const bool sony = IsSonyGamepad(dev.vendorId, dev.productId);
 
-	ULONG maxU = HidP_MaxUsageListLength(HidP_Input, 0x09, pp);
+	ULONG maxU = HidP_MaxUsageListLength(HidP_Input, HID_USAGE_PAGE_BUTTON, pp);
 	if (maxU > 0)
 	{
 		usageBuf_.resize(maxU);
 		ULONG cnt = maxU;
-		if (HidP_GetUsages(HidP_Input, 0x09, 0, usageBuf_.data(),
+		if (HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_BUTTON, 0, usageBuf_.data(),
 		                   &cnt, pp, report, rLen) == HIDP_STATUS_SUCCESS)
 		{
 			for (ULONG j = 0; j < cnt; ++j)
@@ -336,7 +337,7 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 
 	for (const auto& vc : dev.valueCaps)
 	{
-		if (vc.UsagePage != 0x01) continue;
+		if (vc.UsagePage != HID_USAGE_PAGE_GENERIC) continue;
 
 		USAGE uMin = vc.IsRange ? vc.Range.UsageMin : vc.NotRange.Usage;
 		USAGE uMax = vc.IsRange ? vc.Range.UsageMax : vc.NotRange.Usage;
@@ -344,7 +345,7 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 		for (USAGE u = uMin; u <= uMax; ++u)
 		{
 			ULONG val = 0;
-			if (HidP_GetUsageValue(HidP_Input, 0x01, 0, u,
+			if (HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, u,
 			                       &val, pp, report, rLen) != HIDP_STATUS_SUCCESS)
 				continue;
 
@@ -352,19 +353,19 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 			{
 				switch (u)
 				{
-				case 0x30: gs.leftStickX = NormStick(val, vc);
+				case HID_USAGE_GENERIC_X: gs.leftStickX = NormStick(val, vc);
 					break;
-				case 0x31: gs.leftStickY = -NormStick(val, vc);
+				case HID_USAGE_GENERIC_Y: gs.leftStickY = -NormStick(val, vc);
 					break;
-				case 0x32: gs.rightStickX = NormStick(val, vc);
+				case HID_USAGE_GENERIC_Z: gs.rightStickX = NormStick(val, vc);
 					break;
-				case 0x33: gs.leftTrigger = NormTrigger(val, vc);
+				case HID_USAGE_GENERIC_RX: gs.leftTrigger = NormTrigger(val, vc);
 					break;
-				case 0x34: gs.rightTrigger = NormTrigger(val, vc);
+				case HID_USAGE_GENERIC_RY: gs.rightTrigger = NormTrigger(val, vc);
 					break;
-				case 0x35: gs.rightStickY = -NormStick(val, vc);
+				case HID_USAGE_GENERIC_RZ: gs.rightStickY = -NormStick(val, vc);
 					break;
-				case 0x39: btns |= MapHat(val, vc);
+				case HID_USAGE_GENERIC_HATSWITCH: btns |= MapHat(val, vc);
 					break;
 				}
 			}
@@ -372,19 +373,19 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 			{
 				switch (u)
 				{
-				case 0x30: gs.leftStickX = NormStick(val, vc);
+				case HID_USAGE_GENERIC_X: gs.leftStickX = NormStick(val, vc);
 					break;
-				case 0x31: gs.leftStickY = -NormStick(val, vc);
+				case HID_USAGE_GENERIC_Y: gs.leftStickY = -NormStick(val, vc);
 					break;
-				case 0x32: gs.leftTrigger = NormTrigger(val, vc);
+				case HID_USAGE_GENERIC_Z: gs.leftTrigger = NormTrigger(val, vc);
 					break;
-				case 0x33: gs.rightStickX = NormStick(val, vc);
+				case HID_USAGE_GENERIC_RX: gs.rightStickX = NormStick(val, vc);
 					break;
-				case 0x34: gs.rightStickY = -NormStick(val, vc);
+				case HID_USAGE_GENERIC_RY: gs.rightStickY = -NormStick(val, vc);
 					break;
-				case 0x35: gs.rightTrigger = NormTrigger(val, vc);
+				case HID_USAGE_GENERIC_RZ: gs.rightTrigger = NormTrigger(val, vc);
 					break;
-				case 0x39: btns |= MapHat(val, vc);
+				case HID_USAGE_GENERIC_HATSWITCH: btns |= MapHat(val, vc);
 					break;
 				}
 			}
@@ -408,8 +409,8 @@ int HidApiBackend::AllocateSlot()
 
 bool HidApiBackend::IsGamepadOrJoystick(const HIDP_CAPS& caps)
 {
-	return caps.UsagePage == 0x01 &&
-		(caps.Usage == 0x04 || caps.Usage == 0x05);
+	return caps.UsagePage == HID_USAGE_PAGE_GENERIC &&
+		(caps.Usage == HID_USAGE_GENERIC_JOYSTICK || caps.Usage == HID_USAGE_GENERIC_GAMEPAD);
 }
 
 uint16_t HidApiBackend::MapButton(USAGE u)
