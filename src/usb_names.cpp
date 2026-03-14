@@ -62,7 +62,13 @@ static constexpr Entry kTable[] = {
 	{0x054c, 0x0df2, "DualSense Edge"},
 };
 
-} // namespace
+} /**
+ * @brief Lookup a human-friendly name for a USB device by vendor and product ID.
+ *
+ * @param vid USB vendor ID.
+ * @param pid USB product ID.
+ * @return const char* Pointer to a null-terminated string containing the device name if a matching VID/PID is found, `nullptr` otherwise. The returned pointer refers to static storage owned by this module. 
+ */
 
 const char* GetFriendlyName(uint16_t vid, uint16_t pid)
 {

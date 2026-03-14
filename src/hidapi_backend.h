@@ -18,6 +18,39 @@ public:
 	static constexpr int kMaxDevices = 16;
 
 	~HidApiBackend() override;
+	/**
+	 * Poll HID devices, process incoming reports, and update internal gamepad states.
+	 */
+	 
+	/**
+	 * Return the maximum number of device slots supported by this backend.
+	 * @returns The maximum number of slots.
+	 */
+	 
+	/**
+	 * Retrieve the current gamepad state for a given slot.
+	 * @param slot Index of the slot to query; valid range is 0 .. GetMaxSlots()-1.
+	 * @returns Reference to the GamepadState for the specified slot.
+	 */
+	 
+	/**
+	 * Get the backend name identifier.
+	 * @returns Null-terminated string identifying this backend.
+	 */
+	 
+	/**
+	 * Get a human-readable display name for the device assigned to a slot.
+	 * @param slot Index of the slot to query; valid range is 0 .. GetMaxSlots()-1.
+	 * @returns Null-terminated display name for the slot, or an empty string if none.
+	 */
+	 
+	/**
+	 * Per-device runtime information and resources used to manage a HID device.
+	 *
+	 * Contains device path, OS handle and overlapped I/O state, read buffer,
+	 * HID preparsed data and capability descriptors, assigned slot index, flags
+	 * tracking discovery and read state, and the device's vendor/product IDs.
+	 */
 	void Poll() override;
 	[[nodiscard]] int GetMaxSlots() const override;
 	[[nodiscard]] const GamepadState& GetState(int slot) const override;

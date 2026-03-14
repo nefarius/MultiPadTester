@@ -149,7 +149,24 @@ static void DrawSmallButton(ImDrawList* dl, const Layout& L,
     dl->AddText(ImVec2(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f), tc, label);
 }
 
-// ── main entry point ─────────────────────────────────────────
+/**
+ * @brief Render a controller panel that visualizes a gamepad's layout and state.
+ *
+ * Renders a framed panel at the given position/size containing a header (built from the player
+ * slot, optional display name, and backend name), a connection-status pill, and a scaled
+ * representation of the controller showing body, D-pad, face buttons, thumbsticks, bumpers,
+ * triggers, and small buttons. When the gamepad is not connected, displays a centered
+ * "No controller detected" message instead of the controls.
+ *
+ * @param dl ImGui draw list to use for low-level drawing operations.
+ * @param panelPos Top-left corner of the panel in screen coordinates.
+ * @param panelSize Width and height of the panel in screen coordinates.
+ * @param gs Current gamepad state (buttons, sticks, triggers, connection).
+ * @param slotIndex Zero-based player slot index used in the header label.
+ * @param backendName Null-terminated string identifying the input backend (shown in header).
+ * @param displayName Optional null-terminated display name for the controller; when non-empty
+ *                    it is included in the header as "Player N - DisplayName  [backend]".
+ */
 
 void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
                  const GamepadState& gs, int slotIndex, const char* backendName,

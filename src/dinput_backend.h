@@ -17,6 +17,31 @@ public:
 
 	~DInputBackend() override;
 	void Init(HWND hwnd) override;
+	/**
+	 * Poll connected devices and update internal input states.
+	 */
+	 
+	/**
+	 * Maximum number of input slots supported by this backend.
+	 * @returns The maximum slot count.
+	 */
+	
+	/**
+	 * Retrieve the current gamepad state for a given slot.
+	 * @param slot Index of the input slot to query.
+	 * @returns Reference to the `GamepadState` for the specified slot.
+	 */
+	
+	/**
+	 * Name identifying this input backend.
+	 * @returns Pointer to a null-terminated string with the backend name.
+	 */
+	
+	/**
+	 * Human-readable display name for a specific slot.
+	 * @param slot Index of the input slot to query.
+	 * @returns Pointer to a null-terminated string describing the slot or its assigned device.
+	 */
 	void Poll() override;
 	[[nodiscard]] int GetMaxSlots() const override;
 	[[nodiscard]] const GamepadState& GetState(int slot) const override;

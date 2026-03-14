@@ -3,7 +3,27 @@
 #include "imgui.h"
 #include <algorithm>
 
-namespace GamepadRenderer
+/**
+	 * Layout for mapping logical gamepad coordinates to screen space.
+	 *
+	 * Encapsulates an origin and separate X/Y scale factors used to transform
+	 * positions and sizes from the layout's logical coordinate system into
+	 * screen coordinates.
+	 */
+	 
+	/**
+	 * Transform a logical point into screen coordinates by applying the layout origin and scaling.
+	 * @param x X coordinate in the layout's logical coordinate space.
+	 * @param y Y coordinate in the layout's logical coordinate space.
+	 * @returns The transformed point in screen coordinates.
+	 */
+	 
+	/**
+	 * Scale a scalar value using the layout's uniform scale (the smaller of sx and sy).
+	 * @param v Value in the layout's logical units.
+	 * @returns The value scaled into screen units.
+	 */
+	namespace GamepadRenderer
 {
 	struct Layout
 	{

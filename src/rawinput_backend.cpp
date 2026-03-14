@@ -55,8 +55,19 @@ const GamepadState& RawInputBackend::GetState(const int slot) const
 	return states_[slot];
 }
 
+/**
+ * @brief Get the backend name.
+ *
+ * @return const char* Pointer to a null-terminated string identifying the backend.
+ */
 const char* RawInputBackend::GetName() const { return Name; }
 
+/**
+ * @brief Retrieves a human-readable display name for the device occupying a slot.
+ *
+ * @param slot Device slot index (0..kMaxDevices-1).
+ * @return const char* Pointer to a null-terminated friendly name for the device in the specified slot, or `nullptr` if the slot is out of range or no device is present.
+ */
 const char* RawInputBackend::GetSlotDisplayName(int slot) const
 {
 	if (slot < 0 || slot >= kMaxDevices) return nullptr;
@@ -66,7 +77,12 @@ const char* RawInputBackend::GetSlotDisplayName(int slot) const
 	return nullptr;
 }
 
-// ── private helpers ──────────────────────────────────────────
+/**
+ * @brief Obtain the device's preparsed HID data as a PHIDP_PREPARSED_DATA pointer.
+ *
+ * @param d DeviceInfo containing the raw preparsed data buffer.
+ * @return PHIDP_PREPARSED_DATA Pointer to the preparsed HID data, or `nullptr` if the device's preparsed buffer is empty.
+ */
 
 PHIDP_PREPARSED_DATA RawInputBackend::PP(DeviceInfo& d)
 {
