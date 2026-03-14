@@ -182,14 +182,20 @@ void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
         header = std::format("Player {}  [{}]", slotIndex + 1, backendName);
     ImVec2 hts = ImGui::CalcTextSize(header.c_str());
     float headerH = hts.y + 10.0f;
+
+    const char* status = gs.connected ? "Connected" : "Not Connected";
+    ImVec2 sts = ImGui::CalcTextSize(status);
+    const float pillLeft = panelPos.x + panelSize.x - sts.x - 18 - 4;
+    const float headerClipRight = pillLeft;
+    dl->PushClipRect(ImVec2(panelPos.x + 10, panelPos.y),
+                     ImVec2(headerClipRight, panelPos.y + headerH), true);
     dl->AddText(ImVec2(panelPos.x + 10, panelPos.y + 5),
                 gs.connected ? IM_COL32(220, 220, 220, 255)
                              : IM_COL32(100, 100, 100, 255),
                 header.c_str());
+    dl->PopClipRect();
 
     {
-        const char* status = gs.connected ? "Connected" : "Not Connected";
-        ImVec2 sts = ImGui::CalcTextSize(status);
         float px = panelPos.x + panelSize.x - sts.x - 18;
         float py = panelPos.y + 5;
         ImU32 pillCol = gs.connected ? IM_COL32(50, 180, 80, 200)

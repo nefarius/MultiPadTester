@@ -62,5 +62,5 @@ public:
 	[[nodiscard]] virtual int GetMaxSlots() const = 0;
 	[[nodiscard]] virtual const GamepadState& GetState(int slot) const = 0;
 	[[nodiscard]] virtual const char* GetName() const = 0;
-	[[nodiscard]] virtual const char* GetSlotDisplayName(int slot) const { return nullptr; }
+	[[nodiscard]] virtual const char* GetSlotDisplayName([[maybe_unused]] int slot) const { return nullptr; }
 };
