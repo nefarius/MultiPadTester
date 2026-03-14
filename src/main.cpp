@@ -21,6 +21,8 @@
 #include "dinput_backend.h"
 #include "hidapi_backend.h"
 #include "gamepad_renderer.h"
+#include "texture_loader.h"
+#include "resource.h"
 
 #define IDM_ABOUT 0xF200
 #define IDM_PREFERENCES 0xF210
@@ -297,6 +299,22 @@ int APIENTRY wWinMain(
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_d3d.device, g_d3d.deviceCtx);
 
+	ImTextureID controllerTexture = nullptr;
+	{
+		HRSRC hrsrc = FindResourceW(hInstance, MAKEINTRESOURCEW(IDR_CONTROLLER_TEXTURE), RT_RCDATA);
+		if (hrsrc)
+		{
+			HGLOBAL hglob = LoadResource(hInstance, hrsrc);
+			if (hglob)
+			{
+				const void* data = LockResource(hglob);
+				const size_t size = SizeofResource(hInstance, hrsrc);
+				if (data && size != 0)
+					controllerTexture = LoadTextureFromPngMemory(g_d3d.device, data, size, nullptr, nullptr);
+			}
+		}
+	}
+
 	std::vector<std::unique_ptr<IInputBackend>> backends;
 	backends.push_back(std::make_unique<XInputBackend>());
 	backends.push_back(std::make_unique<RawInputBackend>());
@@ -405,7 +423,8 @@ int APIENTRY wWinMain(
 
 							GamepadRenderer::DrawGamepad(dl, pos, size,
 							                             *slots[i].state, slots[i].slotIndex,
-							                             slots[i].backendName, slots[i].displayName);
+							                             slots[i].backendName, slots[i].displayName,
+							                             controllerTexture);
 						}
 					}
 
@@ -499,6 +518,7 @@ int APIENTRY wWinMain(
 
 	g_backends = nullptr;
 
+	ReleaseControllerTexture(static_cast<ID3D11ShaderResourceView*>(controllerTexture));
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();

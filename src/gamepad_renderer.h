@@ -40,5 +40,7 @@
 
 	void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
 	                 const GamepadState& gs, int slotIndex, const char* backendName,
-	                 const char* displayName = nullptr);
+	                 const char* displayName = nullptr,
+	                 ImTextureID bodyTexture = nullptr,
+	                 ImVec2 textureSizeLogical = ImVec2(400.f, 280.f));
 } // namespace GamepadRenderer

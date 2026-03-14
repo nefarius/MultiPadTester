@@ -170,7 +170,9 @@ static void DrawSmallButton(ImDrawList* dl, const Layout& L,
 
 void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
                  const GamepadState& gs, int slotIndex, const char* backendName,
-                 const char* displayName) {
+                 const char* displayName,
+                 ImTextureID bodyTexture,
+                 ImVec2 textureSizeLogical) {
     dl->AddRectFilled(panelPos,
         ImVec2(panelPos.x + panelSize.x, panelPos.y + panelSize.y),
         BgDim(), 8.0f);
@@ -228,7 +230,13 @@ void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
         return;
     }
 
-    DrawBody(dl, L);
+    if (bodyTexture != nullptr) {
+        ImVec2 tl = L.P(0.f, 0.f);
+        ImVec2 br = L.P(textureSizeLogical.x, textureSizeLogical.y);
+        dl->AddImage(bodyTexture, tl, br, ImVec2(0.f, 0.f), ImVec2(1.f, 1.f));
+    } else {
+        DrawBody(dl, L);
+    }
     DrawDPad(dl, L, gs);
     DrawFaceButtons(dl, L, gs);
 

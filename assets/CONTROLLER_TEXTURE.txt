@@ -1,0 +1,5 @@
+controller_body.png is used as the in-app gamepad visualization background.
+
+Replace this file with your own PNG to change how the controller looks.
+Recommended size: 400×280 pixels so it aligns with the button/stick overlays.
+Any size works; the image is scaled to fit the 400×280 layout.
