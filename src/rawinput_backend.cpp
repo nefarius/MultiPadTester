@@ -1,5 +1,6 @@
 #include "rawinput_backend.h"
 #include "sony_layout.h"
+#include "usb_names.h"
 #include <algorithm>
 #include <ranges>
 #include <utility>
@@ -55,6 +56,15 @@ const GamepadState& RawInputBackend::GetState(const int slot) const
 }
 
 const char* RawInputBackend::GetName() const { return Name; }
+
+const char* RawInputBackend::GetSlotDisplayName(int slot) const
+{
+	if (slot < 0 || slot >= kMaxDevices) return nullptr;
+	for (const auto& [h, d] : devices_)
+		if (d.slot == slot)
+			return GetFriendlyName(d.vendorId, d.productId);
+	return nullptr;
+}
 
 // ── private helpers ──────────────────────────────────────────
 

@@ -19,5 +19,6 @@ namespace GamepadRenderer
 	};
 
 	void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
-	                 const GamepadState& gs, int slotIndex, const char* backendName);
+	                 const GamepadState& gs, int slotIndex, const char* backendName,
+	                 const char* displayName = nullptr);
 } // namespace GamepadRenderer

@@ -1,5 +1,6 @@
 #include "hidapi_backend.h"
 #include "sony_layout.h"
+#include "usb_names.h"
 #include <algorithm>
 #include <ranges>
 #include <utility>
@@ -106,6 +107,14 @@ const GamepadState& HidApiBackend::GetState(const int slot) const
 }
 
 const char* HidApiBackend::GetName() const { return Name; }
+
+const char* HidApiBackend::GetSlotDisplayName(int slot) const
+{
+	if (slot < 0 || slot >= kMaxDevices) return nullptr;
+	const auto it = std::ranges::find_if(devices_, [slot](const std::unique_ptr<DeviceInfo>& d) { return d->slot == slot; });
+	if (it == devices_.end()) return nullptr;
+	return GetFriendlyName((*it)->vendorId, (*it)->productId);
+}
 
 // ── device enumeration ───────────────────────────────────────
 

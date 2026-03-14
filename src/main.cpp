@@ -354,11 +354,12 @@ int APIENTRY wWinMain(
 						const GamepadState* state;
 						int slotIndex;
 						const char* backendName;
+						const char* displayName;
 					};
 					std::vector<SlotInfo> slots;
 					for (int i = 0; i < b->GetMaxSlots(); ++i)
 						if (b->GetState(i).connected)
-							slots.push_back({&b->GetState(i), i, b->GetName()});
+							slots.push_back({&b->GetState(i), i, b->GetName(), b->GetSlotDisplayName(i)});
 
 					ImDrawList* dl = ImGui::GetWindowDrawList();
 					ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -393,7 +394,7 @@ int APIENTRY wWinMain(
 
 							GamepadRenderer::DrawGamepad(dl, pos, size,
 							                             *slots[i].state, slots[i].slotIndex,
-							                             slots[i].backendName);
+							                             slots[i].backendName, slots[i].displayName);
 						}
 					}
 

@@ -152,12 +152,17 @@ static void DrawSmallButton(ImDrawList* dl, const Layout& L,
 // ── main entry point ─────────────────────────────────────────
 
 void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
-                 const GamepadState& gs, int slotIndex, const char* backendName) {
+                 const GamepadState& gs, int slotIndex, const char* backendName,
+                 const char* displayName) {
     dl->AddRectFilled(panelPos,
         ImVec2(panelPos.x + panelSize.x, panelPos.y + panelSize.y),
         BgDim(), 8.0f);
 
-    auto header = std::format("Player {}  [{}]", slotIndex + 1, backendName);
+    std::string header;
+    if (displayName && displayName[0] != '\0')
+        header = std::format("Player {} - {}  [{}]", slotIndex + 1, displayName, backendName);
+    else
+        header = std::format("Player {}  [{}]", slotIndex + 1, backendName);
     ImVec2 hts = ImGui::CalcTextSize(header.c_str());
     float headerH = hts.y + 10.0f;
     dl->AddText(ImVec2(panelPos.x + 10, panelPos.y + 5),

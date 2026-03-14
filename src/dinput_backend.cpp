@@ -1,5 +1,6 @@
 #include "dinput_backend.h"
 #include "sony_layout.h"
+#include "usb_names.h"
 #include <algorithm>
 #include <ranges>
 #include <utility>
@@ -125,6 +126,14 @@ const GamepadState& DInputBackend::GetState(int slot) const
 }
 
 const char* DInputBackend::GetName() const { return Name; }
+
+const char* DInputBackend::GetSlotDisplayName(int slot) const
+{
+	if (slot < 0 || slot >= kMaxDevices) return nullptr;
+	const auto it = std::ranges::find_if(devices_, [slot](const DeviceInfo& d) { return d.slot == slot; });
+	if (it == devices_.end()) return nullptr;
+	return GetFriendlyName(it->vendorId, it->productId);
+}
 
 // ── device enumeration ───────────────────────────────────────
 

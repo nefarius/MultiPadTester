@@ -21,6 +21,7 @@ public:
 	[[nodiscard]] int GetMaxSlots() const override;
 	[[nodiscard]] const GamepadState& GetState(int slot) const override;
 	[[nodiscard]] const char* GetName() const override;
+	[[nodiscard]] const char* GetSlotDisplayName(int slot) const override;
 
 private:
 	struct DeviceInfo
