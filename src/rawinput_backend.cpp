@@ -86,6 +86,8 @@ const char* RawInputBackend::GetSlotDisplayName(int slot) const
 
 PHIDP_PREPARSED_DATA RawInputBackend::PP(DeviceInfo& d)
 {
+	if (d.preparsedBuf.empty())
+		return nullptr;
 	return reinterpret_cast<PHIDP_PREPARSED_DATA>(d.preparsedBuf.data());
 }
 

@@ -46,7 +46,8 @@ public:
 	 * Return the display name for a specific slot.
 	 *
 	 * @param slot Index of the slot to query (0-based).
-	 * @returns A null-terminated string containing the display name for the slot, or an empty string if none.
+	 * @returns A null-terminated string on success; nullptr when no display name is available.
+	 *          The returned pointer is valid for the lifetime of this backend; caller does not take ownership.
 	 */
 	 
 	/**

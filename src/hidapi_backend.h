@@ -41,7 +41,7 @@ public:
 	/**
 	 * Get a human-readable display name for the device assigned to a slot.
 	 * @param slot Index of the slot to query; valid range is 0 .. GetMaxSlots()-1.
-	 * @returns Null-terminated display name for the slot, or an empty string if none.
+	 * @returns A null-terminated display name for the slot, or nullptr when no name is available.
 	 */
 	 
 	/**

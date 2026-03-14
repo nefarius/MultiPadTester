@@ -41,6 +41,7 @@ public:
 	 * Human-readable display name for a specific slot.
 	 * @param slot Index of the input slot to query.
 	 * @returns Pointer to a null-terminated string describing the slot or its assigned device.
+	 *          May return nullptr when no slot/device mapping exists or when no name is available.
 	 */
 	void Poll() override;
 	[[nodiscard]] int GetMaxSlots() const override;
