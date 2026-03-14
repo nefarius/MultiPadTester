@@ -149,25 +149,53 @@ static void DrawSmallButton(ImDrawList* dl, const Layout& L,
     dl->AddText(ImVec2(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f), tc, label);
 }
 
-// ── main entry point ─────────────────────────────────────────
+/**
+ * @brief Render a controller panel that visualizes a gamepad's layout and state.
+ *
+ * Renders a framed panel at the given position/size containing a header (built from the player
+ * slot, optional display name, and backend name), a connection-status pill, and a scaled
+ * representation of the controller showing body, D-pad, face buttons, thumbsticks, bumpers,
+ * triggers, and small buttons. When the gamepad is not connected, displays a centered
+ * "No controller detected" message instead of the controls.
+ *
+ * @param dl ImGui draw list to use for low-level drawing operations.
+ * @param panelPos Top-left corner of the panel in screen coordinates.
+ * @param panelSize Width and height of the panel in screen coordinates.
+ * @param gs Current gamepad state (buttons, sticks, triggers, connection).
+ * @param slotIndex Zero-based player slot index used in the header label.
+ * @param backendName Null-terminated string identifying the input backend (shown in header).
+ * @param displayName Optional null-terminated display name for the controller; when non-empty
+ *                    it is included in the header as "Player N - DisplayName  [backend]".
+ */
 
 void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
-                 const GamepadState& gs, int slotIndex, const char* backendName) {
+                 const GamepadState& gs, int slotIndex, const char* backendName,
+                 const char* displayName) {
     dl->AddRectFilled(panelPos,
         ImVec2(panelPos.x + panelSize.x, panelPos.y + panelSize.y),
         BgDim(), 8.0f);
 
-    auto header = std::format("Player {}  [{}]", slotIndex + 1, backendName);
+    std::string header;
+    if (displayName && displayName[0] != '\0')
+        header = std::format("Player {} - {}  [{}]", slotIndex + 1, displayName, backendName);
+    else
+        header = std::format("Player {}  [{}]", slotIndex + 1, backendName);
     ImVec2 hts = ImGui::CalcTextSize(header.c_str());
     float headerH = hts.y + 10.0f;
+
+    const char* status = gs.connected ? "Connected" : "Not Connected";
+    ImVec2 sts = ImGui::CalcTextSize(status);
+    const float pillLeft = panelPos.x + panelSize.x - sts.x - 18 - 4;
+    const float headerClipRight = pillLeft;
+    dl->PushClipRect(ImVec2(panelPos.x + 10, panelPos.y),
+                     ImVec2(headerClipRight, panelPos.y + headerH), true);
     dl->AddText(ImVec2(panelPos.x + 10, panelPos.y + 5),
                 gs.connected ? IM_COL32(220, 220, 220, 255)
                              : IM_COL32(100, 100, 100, 255),
                 header.c_str());
+    dl->PopClipRect();
 
     {
-        const char* status = gs.connected ? "Connected" : "Not Connected";
-        ImVec2 sts = ImGui::CalcTextSize(status);
         float px = panelPos.x + panelSize.x - sts.x - 18;
         float py = panelPos.y + 5;
         ImU32 pillCol = gs.connected ? IM_COL32(50, 180, 80, 200)

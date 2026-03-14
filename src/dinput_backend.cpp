@@ -1,5 +1,6 @@
 #include "dinput_backend.h"
 #include "sony_layout.h"
+#include "usb_names.h"
 #include <algorithm>
 #include <ranges>
 #include <utility>
@@ -124,9 +125,39 @@ const GamepadState& DInputBackend::GetState(int slot) const
 	return states_[slot];
 }
 
+/**
+ * Retrieve the backend's short name.
+ *
+ * @return Pointer to a null-terminated C-string with the backend name.
+ */
 const char* DInputBackend::GetName() const { return Name; }
 
-// ── device enumeration ───────────────────────────────────────
+/**
+ * @brief Retrieve a human-friendly display name for the device occupying a slot.
+ *
+ * @param slot Device slot index (valid range: 0..kMaxDevices-1).
+ * @return const char* Null-terminated display name for the device, or `nullptr` if the slot is out of range or no device is present.
+ */
+const char* DInputBackend::GetSlotDisplayName(int slot) const
+{
+	if (slot < 0 || slot >= kMaxDevices) return nullptr;
+	const auto it = std::ranges::find_if(devices_, [slot](const DeviceInfo& d) { return d.slot == slot; });
+	if (it == devices_.end()) return nullptr;
+	return GetFriendlyName(it->vendorId, it->productId);
+}
+
+/**
+ * @brief Callback invoked for each DirectInput device during enumeration.
+ *
+ * Marks an already-known device as found or attempts to create and register a new
+ * DeviceInfo for the discovered device. When SetupDevice succeeds, the new device
+ * is appended to the backend's device list and marked as found.
+ *
+ * @param inst Pointer to the enumerated device instance information.
+ * @param ctx  User context passed to the enumerator; expected to be a pointer to
+ *             the DInputBackend instance.
+ * @return BOOL Always returns DIENUM_CONTINUE to continue device enumeration.
+ */
 
 BOOL CALLBACK DInputBackend::EnumCallback(
 	const DIDEVICEINSTANCEW* inst, VOID* ctx)

@@ -1,5 +1,6 @@
 #include "rawinput_backend.h"
 #include "sony_layout.h"
+#include "usb_names.h"
 #include <algorithm>
 #include <ranges>
 #include <utility>
@@ -54,12 +55,39 @@ const GamepadState& RawInputBackend::GetState(const int slot) const
 	return states_[slot];
 }
 
+/**
+ * @brief Get the backend name.
+ *
+ * @return const char* Pointer to a null-terminated string identifying the backend.
+ */
 const char* RawInputBackend::GetName() const { return Name; }
 
-// ── private helpers ──────────────────────────────────────────
+/**
+ * @brief Retrieves a human-readable display name for the device occupying a slot.
+ *
+ * @param slot Device slot index (0..kMaxDevices-1).
+ * @return const char* Pointer to a null-terminated friendly name for the device in the specified slot, or `nullptr` if the slot is out of range or no device is present.
+ */
+const char* RawInputBackend::GetSlotDisplayName(int slot) const
+{
+	if (slot < 0 || slot >= kMaxDevices) return nullptr;
+	for (const auto& [h, d] : devices_)
+		if (d.slot == slot)
+			return GetFriendlyName(d.vendorId, d.productId);
+	return nullptr;
+}
+
+/**
+ * @brief Obtain the device's preparsed HID data as a PHIDP_PREPARSED_DATA pointer.
+ *
+ * @param d DeviceInfo containing the raw preparsed data buffer.
+ * @return PHIDP_PREPARSED_DATA Pointer to the preparsed HID data, or `nullptr` if the device's preparsed buffer is empty.
+ */
 
 PHIDP_PREPARSED_DATA RawInputBackend::PP(DeviceInfo& d)
 {
+	if (d.preparsedBuf.empty())
+		return nullptr;
 	return reinterpret_cast<PHIDP_PREPARSED_DATA>(d.preparsedBuf.data());
 }
 

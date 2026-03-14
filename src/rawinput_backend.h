@@ -16,10 +16,51 @@ public:
 
 	void Init(HWND hwnd) override;
 	bool OnWindowMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
+	/**
+	 * Poll input backend and update internal per-slot gamepad states.
+	 *
+	 * This performs a single polling pass to process pending input events and refresh
+	 * stored GamepadState for each active slot.
+	 */
+	 
+	/**
+	 * Return the maximum number of device slots supported by this backend.
+	 *
+	 * @returns The maximum number of slots available for gamepad devices.
+	 */
+	 
+	/**
+	 * Return the current GamepadState for a given slot.
+	 *
+	 * @param slot Index of the slot to query (0-based).
+	 * @returns Reference to the stored GamepadState for the specified slot.
+	 */
+	 
+	/**
+	 * Return the backend's human-readable name.
+	 *
+	 * @returns A null-terminated string containing the backend name.
+	 */
+	 
+	/**
+	 * Return the display name for a specific slot.
+	 *
+	 * @param slot Index of the slot to query (0-based).
+	 * @returns A null-terminated string on success; nullptr when no display name is available.
+	 *          The returned pointer is valid for the lifetime of this backend; caller does not take ownership.
+	 */
+	 
+	/**
+	 * Information tracked for a single raw input device.
+	 *
+	 * Contains the device handle, cached preparsed HID data and capability structures,
+	 * the assigned slot index, and vendor/product identifiers.
+	 */
 	void Poll() override;
 	[[nodiscard]] int GetMaxSlots() const override;
 	[[nodiscard]] const GamepadState& GetState(int slot) const override;
 	[[nodiscard]] const char* GetName() const override;
+	[[nodiscard]] const char* GetSlotDisplayName(int slot) const override;
 
 private:
 	struct DeviceInfo

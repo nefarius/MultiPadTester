@@ -1,5 +1,6 @@
 #include "hidapi_backend.h"
 #include "sony_layout.h"
+#include "usb_names.h"
 #include <algorithm>
 #include <ranges>
 #include <utility>
@@ -105,9 +106,36 @@ const GamepadState& HidApiBackend::GetState(const int slot) const
 	return states_[slot];
 }
 
+/**
+ * @brief Returns the backend's identifier string.
+ *
+ * @return const char* Null-terminated name of this HID backend.
+ */
 const char* HidApiBackend::GetName() const { return Name; }
 
-// ── device enumeration ───────────────────────────────────────
+/**
+ * @brief Retrieve the user-facing display name for a device assigned to a slot.
+ *
+ * @param slot Slot index to query (valid range: 0 to kMaxDevices - 1).
+ * @return const char* Pointer to a friendly name derived from the device's vendor and product IDs,
+ *         or `nullptr` if the slot is out of range or no device is assigned to that slot.
+ */
+const char* HidApiBackend::GetSlotDisplayName(int slot) const
+{
+	if (slot < 0 || slot >= kMaxDevices) return nullptr;
+	const auto it = std::ranges::find_if(devices_, [slot](const std::unique_ptr<DeviceInfo>& d) { return d->slot == slot; });
+	if (it == devices_.end()) return nullptr;
+	return GetFriendlyName((*it)->vendorId, (*it)->productId);
+}
+
+/**
+ * @brief Enumerates connected HID devices and synchronizes the backend's device list.
+ *
+ * @details Scans the system for present HID device interfaces, marks previously-known
+ * devices that remain present, attempts to open and initialize newly discovered devices,
+ * and removes (and closes) devices that are no longer present. Updates the internal
+ * devices_ container and associated per-slot state as devices are added or removed.
+ */
 
 void HidApiBackend::EnumerateDevices()
 {

@@ -214,6 +214,17 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
+/**
+ * @brief Application entry point that initializes subsystems, runs the main event and render loop, and performs cleanup on exit.
+ *
+ * Initializes DPI awareness, registers the main window class, loads persisted preferences, creates the main window and Direct3D/ImGui backends, constructs input backends, and enters the primary message/poll/render loop that drives UI and input visualization. On exit it shuts down ImGui and Direct3D, saves state as needed, and unregisters the window class.
+ *
+ * @param hInstance Handle to the current application instance.
+ * @param hPrevInstance Reserved; typically unused.
+ * @param lpCmdLine Command line for the application as a Unicode string.
+ * @param nCmdShow Controls how the window is to be shown.
+ * @return int `0` on normal exit, non-zero on initialization failure (e.g., Direct3D creation failure).
+ */
 int APIENTRY wWinMain(
 	_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE,
@@ -354,11 +365,12 @@ int APIENTRY wWinMain(
 						const GamepadState* state;
 						int slotIndex;
 						const char* backendName;
+						const char* displayName;
 					};
 					std::vector<SlotInfo> slots;
 					for (int i = 0; i < b->GetMaxSlots(); ++i)
 						if (b->GetState(i).connected)
-							slots.push_back({&b->GetState(i), i, b->GetName()});
+							slots.push_back({&b->GetState(i), i, b->GetName(), b->GetSlotDisplayName(i)});
 
 					ImDrawList* dl = ImGui::GetWindowDrawList();
 					ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -393,7 +405,7 @@ int APIENTRY wWinMain(
 
 							GamepadRenderer::DrawGamepad(dl, pos, size,
 							                             *slots[i].state, slots[i].slotIndex,
-							                             slots[i].backendName);
+							                             slots[i].backendName, slots[i].displayName);
 						}
 					}
 
