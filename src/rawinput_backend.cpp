@@ -1,6 +1,7 @@
 #include "rawinput_backend.h"
 #include "sony_layout.h"
 #include "usb_names.h"
+#include "xbox_wireless_hid.h"
 #include <algorithm>
 #include <format>
 #include <ranges>
@@ -311,37 +312,8 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 			}
 		}
 
-		// Xbox Wireless Controller (045e/02ff): Rz missing from value caps; try HID API then parse report (Z at 9-10, Rz at 11-12, 16-bit BE).
-		if (!sony && dev.vendorId == 0x045e && dev.productId == 0x02ff)
-		{
-			ULONG rzVal = 0;
-			NTSTATUS rzStatus = 1;
-			const USHORT maxLink = (dev.caps.NumberLinkCollectionNodes > 0) ? dev.caps.NumberLinkCollectionNodes : 1;
-			for (USHORT lc = 0; lc < maxLink && lc < 32u; ++lc)
-			{
-				rzStatus = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, lc, HID_USAGE_GENERIC_RZ,
-				                              &rzVal, pp, report, rLen);
-				if (rzStatus == HIDP_STATUS_SUCCESS)
-				{
-					HIDP_VALUE_CAPS vcRz = {};
-					vcRz.LogicalMin = 0;
-					vcRz.LogicalMax = 0;
-					gs.rightTrigger = NormTrigger(rzVal, vcRz);
-					break;
-				}
-			}
-			if (rzStatus != HIDP_STATUS_SUCCESS && rLen >= 11)
-			{
-				// Byte 10 is a combined trigger axis: 128=rest, 0=full RT, 255=full LT. Derive RT only when value <= 128.
-				const size_t dataStart = (rLen > 0) ? 1u : 0u;
-				const size_t triggerWordOffset = dataStart + 8u;
-				uint8_t combined = static_cast<unsigned char>(report[triggerWordOffset + 1]);
-				if (combined <= 128u)
-					gs.rightTrigger = std::clamp((128.0f - static_cast<float>(combined)) / 128.0f, 0.0f, 1.0f);
-				else
-					gs.rightTrigger = 0.0f;
-			}
-		}
+		XboxWireless_ApplyRightTrigger(dev.vendorId, dev.productId, sony, gs, pp, report, rLen,
+			(dev.caps.NumberLinkCollectionNodes > 0) ? dev.caps.NumberLinkCollectionNodes : 1);
 
 		gs.buttons = btns;
 	}
