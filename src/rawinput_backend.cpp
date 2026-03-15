@@ -2,7 +2,9 @@
 #include "sony_layout.h"
 #include "usb_names.h"
 #include <algorithm>
+#include <format>
 #include <ranges>
+#include <string>
 #include <utility>
 #include <hidusage.h>
 
@@ -149,6 +151,7 @@ bool RawInputBackend::SetupDevice(HANDLE h, DeviceInfo& d)
 		else
 			d.valueCaps.resize(n);
 	}
+
 	return true;
 }
 
@@ -249,9 +252,11 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 			}
 		}
 
+		const UCHAR reportId = (rLen > 0) ? static_cast<UCHAR>(report[0]) : 0;
 		for (const auto& vc : dev.valueCaps)
 		{
 			if (vc.UsagePage != HID_USAGE_PAGE_GENERIC) continue;
+			if (vc.ReportID != 0 && (rLen == 0 || reportId != vc.ReportID)) continue;
 
 			const USAGE uMin = vc.IsRange ? vc.Range.UsageMin : vc.NotRange.Usage;
 			const USAGE uMax = vc.IsRange ? vc.Range.UsageMax : vc.NotRange.Usage;
@@ -259,7 +264,7 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 			for (USAGE u = uMin; u <= uMax; ++u)
 			{
 				ULONG val = 0;
-				if (HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, u,
+				if (HidP_GetUsageValue(HidP_Input, vc.UsagePage, vc.LinkCollection, u,
 				                       &val, pp, report, rLen) != HIDP_STATUS_SUCCESS)
 					continue;
 
@@ -303,6 +308,38 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 						break;
 					}
 				}
+			}
+		}
+
+		// Xbox Wireless Controller (045e/02ff): Rz missing from value caps; try HID API then parse report (Z at 9-10, Rz at 11-12, 16-bit BE).
+		if (!sony && dev.vendorId == 0x045e && dev.productId == 0x02ff)
+		{
+			ULONG rzVal = 0;
+			NTSTATUS rzStatus = 1;
+			const USHORT maxLink = (dev.caps.NumberLinkCollectionNodes > 0) ? dev.caps.NumberLinkCollectionNodes : 1;
+			for (USHORT lc = 0; lc < maxLink && lc < 32u; ++lc)
+			{
+				rzStatus = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, lc, HID_USAGE_GENERIC_RZ,
+				                              &rzVal, pp, report, rLen);
+				if (rzStatus == HIDP_STATUS_SUCCESS)
+				{
+					HIDP_VALUE_CAPS vcRz = {};
+					vcRz.LogicalMin = 0;
+					vcRz.LogicalMax = 0;
+					gs.rightTrigger = NormTrigger(rzVal, vcRz);
+					break;
+				}
+			}
+			if (rzStatus != HIDP_STATUS_SUCCESS && rLen >= 11)
+			{
+				// Byte 10 is a combined trigger axis: 128=rest, 0=full RT, 255=full LT. Derive RT only when value <= 128.
+				const size_t dataStart = (rLen > 0) ? 1u : 0u;
+				const size_t triggerWordOffset = dataStart + 8u;
+				uint8_t combined = static_cast<unsigned char>(report[triggerWordOffset + 1]);
+				if (combined <= 128u)
+					gs.rightTrigger = std::clamp((128.0f - static_cast<float>(combined)) / 128.0f, 0.0f, 1.0f);
+				else
+					gs.rightTrigger = 0.0f;
 			}
 		}
 
@@ -374,7 +411,12 @@ LONG RawInputBackend::ToSigned(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 float RawInputBackend::NormStick(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	LONG lo = vc.LogicalMin, hi = vc.LogicalMax;
-	if (lo >= hi) return 0.0f;
+	if (lo >= hi) {
+		// Fallback for invalid/mangled range (e.g. LogicalMax 65535 cast to LONG as -1): assume 16-bit unsigned axis
+		const float mid = 32767.5f, half = 32767.5f;
+		float v = static_cast<float>(raw);
+		return std::clamp((v - mid) / half, -1.0f, 1.0f);
+	}
 	float v = static_cast<float>(ToSigned(raw, vc));
 	float mid = (lo + hi) / 2.0f;
 	float half = (hi - lo) / 2.0f;
@@ -384,7 +426,10 @@ float RawInputBackend::NormStick(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 float RawInputBackend::NormTrigger(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	LONG lo = vc.LogicalMin, hi = vc.LogicalMax;
-	if (lo >= hi) return 0.0f;
+	if (lo >= hi) {
+		// Fallback: assume 16-bit axis with rest at center (32768); map to 0..1 so rest=0, full=1
+		return std::clamp((static_cast<float>(raw) - 32768.0f) / 32767.0f, 0.0f, 1.0f);
+	}
 	float v = static_cast<float>(ToSigned(raw, vc));
 	return std::clamp((v - lo) / static_cast<float>(hi - lo), 0.0f, 1.0f);
 }
