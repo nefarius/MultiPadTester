@@ -7,6 +7,19 @@
 
 namespace {
 
+/**
+ * @brief Decodes PNG data from memory into a contiguous 32-bit RGBA pixel buffer.
+ *
+ * Decodes the PNG image contained in the provided memory block and writes pixel data
+ * as 8-bit-per-channel RGBA into outRgba. Also outputs the decoded image width and height.
+ *
+ * @param pngData Pointer to the PNG data in memory.
+ * @param pngSize Size in bytes of the PNG data.
+ * @param[out] outRgba Receives the decoded image pixels in row-major order (RGBA8). Resized to hold width * height * 4 bytes.
+ * @param[out] outWidth Receives the decoded image width in pixels.
+ * @param[out] outHeight Receives the decoded image height in pixels.
+ * @return true if decoding succeeded and outputs were populated, false otherwise.
+ */
 bool DecodePngToRgba(const void* pngData, size_t pngSize,
                      std::vector<uint8_t>& outRgba, int& outWidth, int& outHeight)
 {
@@ -97,7 +110,21 @@ bool DecodePngToRgba(const void* pngData, size_t pngSize,
     return true;
 }
 
-} // namespace
+} /**
+ * @brief Create a D3D11 shader resource view from PNG image data stored in memory.
+ *
+ * Decodes the provided PNG bytes to 32-bit RGBA, creates an immutable DXGI_FORMAT_R8G8B8A8_UNORM
+ * 2D texture initialized with the decoded pixels, and returns a shader resource view for that texture.
+ *
+ * @param device Pointer to the D3D11 device used to create the texture and SRV.
+ * @param pngData Pointer to the PNG data in memory.
+ * @param pngSize Size of the PNG data in bytes.
+ * @param outWidth If non-null, receives the decoded image width in pixels.
+ * @param outHeight If non-null, receives the decoded image height in pixels.
+ * @return ID3D11ShaderResourceView* The created shader resource view on success, or `nullptr` on failure.
+ *
+ * Ownership: caller receives a reference to the SRV and is responsible for releasing it when no longer needed.
+ */
 
 ID3D11ShaderResourceView* LoadTextureFromPngMemory(ID3D11Device* device,
                                                     const void* pngData,
@@ -158,6 +185,14 @@ ID3D11ShaderResourceView* LoadTextureFromPngMemory(ID3D11Device* device,
     return srv;
 }
 
+/**
+ * @brief Releases a shader resource view and its underlying D3D11 resource.
+ *
+ * If `srv` is non-null, this function retrieves the resource referenced by the shader resource view,
+ * releases the view, and then releases the underlying resource. If `srv` is null, the function does nothing.
+ *
+ * @param srv Pointer to the ID3D11ShaderResourceView to release; may be null.
+ */
 void ReleaseControllerTexture(ID3D11ShaderResourceView* srv)
 {
     if (!srv)

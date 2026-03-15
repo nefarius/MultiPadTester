@@ -114,6 +114,16 @@ bool RawInputBackend::IsGamepadOrJoystick(HANDLE h)
 		(info.hid.usUsage == HID_USAGE_GENERIC_JOYSTICK || info.hid.usUsage == HID_USAGE_GENERIC_GAMEPAD);
 }
 
+/**
+ * @brief Initializes DeviceInfo for a raw HID device and retrieves its HID descriptors.
+ *
+ * Populates the provided DeviceInfo with the device handle, vendor/product identifiers (when available),
+ * the preparsed HID buffer, HID capabilities, and input value capability descriptors.
+ *
+ * @param h Raw input device handle to initialize from.
+ * @param d Output structure that will be filled with preparsed HID data, caps, value caps, vendorId, productId, and handle.
+ * @return true if the device information and required HID descriptors were successfully retrieved and stored in `d`, false if any required data (preparsed buffer or HID capabilities) could not be obtained.
+ */
 bool RawInputBackend::SetupDevice(HANDLE h, DeviceInfo& d)
 {
 	d.handle = h;
@@ -226,6 +236,18 @@ void RawInputBackend::HandleRawInput(const HRAWINPUT hri)
 	ParseReport(dev, raw->data.hid);
 }
 
+/**
+ * @brief Parse raw HID reports for a device and update its gamepad state.
+ *
+ * Processes each report in the provided RAWHID packet, extracts button usages,
+ * axis and hat values (honoring per-report-ID filtering), applies vendor-specific
+ * mappings (including Sony mappings and vendor-specific right-trigger adjustments),
+ * and updates the backend's GamepadState for the device's assigned slot.
+ *
+ * @param dev DeviceInfo for the source device; its assigned slot is used to locate
+ *            the GamepadState that will be updated.
+ * @param hid Raw HID packet containing one or more HID reports to parse.
+ */
 void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 {
 	const auto pp = PP(dev);
@@ -380,6 +402,18 @@ LONG RawInputBackend::ToSigned(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 	return static_cast<LONG>(raw);
 }
 
+/**
+ * @brief Normalizes a stick axis value to the range [-1, 1].
+ *
+ * Converts a raw HID axis reading to a centered floating-point value using the logical
+ * minimum and maximum from the provided value capability. If the capability's logical
+ * range is invalid (LogicalMin >= LogicalMax), treats the input as a 16-bit unsigned
+ * axis with midpoint 32767.5 as a fallback. The result is clamped to [-1, 1].
+ *
+ * @param raw Raw axis value from the HID report.
+ * @param vc HID value capability describing the axis's logical range and bit size.
+ * @return float Normalized axis value in the range [-1, 1].
+ */
 float RawInputBackend::NormStick(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	LONG lo = vc.LogicalMin, hi = vc.LogicalMax;
@@ -395,6 +429,18 @@ float RawInputBackend::NormStick(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 	return std::clamp((v - mid) / half, -1.0f, 1.0f);
 }
 
+/**
+ * @brief Normalizes a raw trigger axis value into the range [0, 1].
+ *
+ * Uses the HID value cap's logical minimum and maximum to map the axis so that the logical
+ * minimum becomes 0 and the logical maximum becomes 1. If the value cap contains an invalid
+ * range (logical minimum greater than or equal to logical maximum), falls back to treating
+ * the input as a 16-bit axis with rest at 32768 and maps that center-based range into [0, 1].
+ *
+ * @param raw The raw axis value read from the HID report.
+ * @param vc  The HIDP_VALUE_CAPS describing the axis (logical range, bit size, etc.).
+ * @return float A clamped value between 0.0 and 1.0 representing the normalized trigger position.
+ */
 float RawInputBackend::NormTrigger(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	LONG lo = vc.LogicalMin, hi = vc.LogicalMax;

@@ -61,11 +61,21 @@ static const LayoutCoords SONY_LAYOUT = {
 	"Share", "PS", "Options"
 };
 
+/**
+ * @brief Selects the layout coordinates for the specified layout type.
+ *
+ * @param t Layout type indicating which coordinate set to use (e.g., LayoutType::Sony).
+ * @return const LayoutCoords& Reference to the corresponding LayoutCoords constant: SONY_LAYOUT when t is LayoutType::Sony, otherwise XBOX_LAYOUT.
+ */
 static const LayoutCoords& GetLayoutCoords(LayoutType t) {
 	return t == LayoutType::Sony ? SONY_LAYOUT : XBOX_LAYOUT;
 }
 
-// ── palette ──────────────────────────────────────────────────
+/**
+ * @brief Color used for the "A" face button.
+ *
+ * @return ImU32 Packed RGBA color equal to approximately RGB(96, 202, 56) with alpha 255.
+ */
 
 static ImU32 ColorA()  { return IM_COL32( 96, 202,  56, 255); }
 static ImU32 ColorB()  { return IM_COL32(228,  56,  56, 255); }
@@ -78,7 +88,16 @@ static ImU32 Body()    { return IM_COL32( 50,  50,  55, 255); }
 static ImU32 Outline() { return IM_COL32(120, 120, 130, 255); }
 static ImU32 BgDim()   { return IM_COL32( 35,  35,  38, 180); }
 
-// ── small drawing helpers ────────────────────────────────────
+/**
+ * @brief Draws the controller body and its left/right side panels using the provided layout.
+ *
+ * Renders filled, rounded rectangles with outlines to represent the main controller shell
+ * and the two side panels. Positions, sizes, corner radii and stroke widths are derived
+ * from the supplied Layout instance and the module's color helpers.
+ *
+ * @param dl ImGui draw list used for rendering.
+ * @param L Layout providing coordinate transforms and scaling for placement and sizes.
+ */
 
 static void DrawBody(ImDrawList* dl, const Layout& L) {
     ImVec2 tl = L.P(40, 30);
@@ -97,6 +116,18 @@ static void DrawBody(ImDrawList* dl, const Layout& L) {
     dl->AddRect(grtl, grbr, Outline(), L.S(20), 0, L.S(2));
 }
 
+/**
+ * @brief Renders a D-pad at the given logical center, showing directional presses.
+ *
+ * Draws a cross-shaped D-pad centered at (cx, cy) in layout coordinates and highlights
+ * individual directions when the corresponding D-pad buttons in gs are pressed.
+ *
+ * @param dl ImGui draw list used to issue drawing commands.
+ * @param L Layout helper providing coordinate transforms and scaling.
+ * @param gs Current gamepad state used to query directional button presses.
+ * @param cx X coordinate of the D-pad center in logical layout space.
+ * @param cy Y coordinate of the D-pad center in logical layout space.
+ */
 static void DrawDPad(ImDrawList* dl, const Layout& L, const GamepadState& gs, float cx, float cy) {
     ImVec2 center = L.P(cx, cy);
     float arm = L.S(18);
@@ -133,6 +164,24 @@ static void DrawDPad(ImDrawList* dl, const Layout& L, const GamepadState& gs, fl
             ImVec2(center.x + arm, center.y + w * 0.5f), Lit(), rnd);
 }
 
+/**
+ * @brief Render the four face buttons (A/B/X/Y) with colors, labels, and pressed-state visuals.
+ *
+ * Draws four circular face buttons positioned around the given center using the supplied Layout for
+ * scaling and positioning. Each button is filled with its face color when pressed (or a dim fill when
+ * not), has a colored outline, and displays the provided label centered on the button. Button press
+ * state is read from the provided GamepadState.
+ *
+ * @param dl ImGui draw list used to issue the rendering commands.
+ * @param L Layout providing coordinate transforms and scaling.
+ * @param gs Current gamepad state used to determine which face buttons are pressed.
+ * @param cx X coordinate (logical) of the face-button group center.
+ * @param cy Y coordinate (logical) of the face-button group center.
+ * @param labelA Label text to render on the A button.
+ * @param labelB Label text to render on the B button.
+ * @param labelX Label text to render on the X button.
+ * @param labelY Label text to render on the Y button.
+ */
 static void DrawFaceButtons(ImDrawList* dl, const Layout& L, const GamepadState& gs,
                             float cx, float cy,
                             const char* labelA, const char* labelB,
@@ -212,15 +261,16 @@ static void DrawSmallButton(ImDrawList* dl, const Layout& L,
 }
 
 /**
- * @brief Render a controller panel that visualizes a gamepad's layout and state.
+ * @brief Render a framed controller panel visualizing a gamepad's layout and current state.
  *
- * Renders a framed panel at the given position/size containing a header (built from the player
- * slot, optional display name, and backend name), a connection-status pill, and a scaled
- * representation of the controller showing body, D-pad, face buttons, thumbsticks, bumpers,
- * triggers, and small buttons. When the gamepad is not connected, displays a centered
- * "No controller detected" message instead of the controls.
+ * Renders a header containing the player slot, optional display name, and backend name plus a
+ * connection-status pill, and draws a scaled representation of the controller (body, D‑pad,
+ * face buttons, thumbsticks, bumpers, triggers, and small buttons) inside the panel. If the
+ * gamepad is not connected, displays a centered "No controller detected" message instead of
+ * the controls. If a body texture is provided, it is used for the controller background;
+ * otherwise the body is drawn procedurally.
  *
- * @param dl ImGui draw list to use for low-level drawing operations.
+ * @param dl ImGui draw list used for low-level drawing operations.
  * @param panelPos Top-left corner of the panel in screen coordinates.
  * @param panelSize Width and height of the panel in screen coordinates.
  * @param gs Current gamepad state (buttons, sticks, triggers, connection).
@@ -228,6 +278,12 @@ static void DrawSmallButton(ImDrawList* dl, const Layout& L,
  * @param backendName Null-terminated string identifying the input backend (shown in header).
  * @param displayName Optional null-terminated display name for the controller; when non-empty
  *                    it is included in the header as "Player N - DisplayName  [backend]".
+ * @param bodyTexture Optional ImGui texture ID to render as the controller body; when null,
+ *                    the procedural body is drawn instead.
+ * @param textureSizeLogical Logical size (width, height) of the provided bodyTexture in the
+ *                           same coordinate space used by the renderer.
+ * @param layoutType LayoutType selecting the coordinate/label set (e.g., Xbox or Sony) used to
+ *                   position and label controls within the rendered controller.
  */
 
 void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,

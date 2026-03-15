@@ -40,6 +40,15 @@ struct AppPrefs
 	int lastTabIndex = 0;  // backend tab index to restore on launch
 };
 
+/**
+ * @brief Get the full path to the application's config file in the user's APPDATA folder.
+ *
+ * Creates a "MultiPadTester" subdirectory inside the user's APPDATA folder if it does not exist,
+ * and returns the path to "config.ini" inside that directory.
+ *
+ * @return std::wstring The full config file path, or an empty string if the APPDATA environment
+ *         variable could not be retrieved.
+ */
 static std::wstring GetConfigPath()
 {
 	wchar_t appdata[512]{};
@@ -50,6 +59,21 @@ static std::wstring GetConfigPath()
 	return dir + L"\\config.ini";
 }
 
+/**
+ * @brief Loads application preferences from the on-disk config file.
+ *
+ * Reads the config file located in the application's AppData folder and applies recognized keys
+ * from the [Settings] section into the provided AppPrefs structure. Supported keys:
+ * RefreshRate, VSync, WindowX, WindowY, WindowW, WindowH, LastTabIndex.
+ *
+ * - If the config file is missing or unreadable, the function leaves prefs unchanged.
+ * - RefreshRate is accepted only if it equals 0, 60, 75, 120, or 144; other values are ignored.
+ * - Boolean VSync accepts "1", "true", or "yes" as true.
+ * - Integer parsing failures are ignored and do not modify the corresponding field.
+ * - If the resulting WindowW or WindowH is less than or equal to zero, both are reset to 0.
+ *
+ * @param prefs Reference to an AppPrefs instance to populate with values from disk.
+ */
 static void LoadConfig(AppPrefs& prefs)
 {
 	std::wstring path = GetConfigPath();
@@ -120,6 +144,18 @@ static void LoadConfig(AppPrefs& prefs)
 		prefs.windowW = prefs.windowH = 0;
 }
 
+/**
+ * @brief Persists application preferences to the user's configuration file.
+ *
+ * Writes the AppPrefs values into the application's INI-style config file under a
+ * [Settings] section so they can be restored on next launch.
+ *
+ * @param prefs Preference values to persist. The following fields are written:
+ *              - refreshRate: monitor refresh rate selection (0 means monitor default)
+ *              - vsync: vertical sync enabled flag
+ *              - windowX, windowY, windowW, windowH: saved window position and size
+ *              - lastTabIndex: backend tab index to restore on launch
+ */
 static void SaveConfig(const AppPrefs& prefs)
 {
 	std::wstring path = GetConfigPath();
@@ -138,6 +174,18 @@ static void SaveConfig(const AppPrefs& prefs)
 	f << "LastTabIndex=" << prefs.lastTabIndex << "\n";
 }
 
+/**
+ * @brief Determines whether a proposed window rectangle is plausible for display.
+ *
+ * Ensures the width and height are within allowed bounds and that the window's
+ * top-left point lies on a connected monitor.
+ *
+ * @param x X coordinate of the window's top-left corner in screen pixels.
+ * @param y Y coordinate of the window's top-left corner in screen pixels.
+ * @param w Width of the window in pixels.
+ * @param h Height of the window in pixels.
+ * @return true if the size is within 320..4096 and the top-left point is on a monitor, false otherwise.
+ */
 static bool IsWindowRectPlausible(int x, int y, int w, int h)
 {
 	constexpr int minSize = 320, maxSize = 4096;

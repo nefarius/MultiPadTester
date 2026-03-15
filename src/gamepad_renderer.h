@@ -25,6 +25,25 @@
 	 */
 	namespace GamepadRenderer
 {
+	/**
+	 * @brief Holds an origin and per-axis scale factors for converting logical gamepad coordinates to screen space.
+	 *
+	 * The origin is a screen-space offset applied after scaling. sx and sy are the horizontal and vertical
+	 * scale factors, respectively, used to map logical coordinates into the panel's pixel coordinates.
+	 */
+	
+	/**
+	 * @brief Map a logical (x, y) coordinate to a screen-space point using this layout.
+	 * @param x Logical x coordinate.
+	 * @param y Logical y coordinate.
+	 * @returns Screen-space ImVec2 obtained by applying the per-axis scales and then adding the origin offset.
+	 */
+	
+	/**
+	 * @brief Scale a scalar value uniformly using the smaller of the two axis scales.
+	 * @param v Value in logical units to scale.
+	 * @returns The value multiplied by min(sx, sy).
+	 */
 	enum class LayoutType { Xbox, Sony };
 
 	struct Layout

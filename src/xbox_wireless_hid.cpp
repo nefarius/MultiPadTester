@@ -5,11 +5,32 @@
 #include <hidusage.h>
 #include <hidpi.h>
 
+/**
+ * @brief Determines whether the given USB vendor and product IDs identify an Xbox Wireless device.
+ *
+ * @param vendorId USB vendor identifier to check.
+ * @param productId USB product identifier to check.
+ * @return true if the IDs match the known Xbox Wireless vendor and product identifiers, false otherwise.
+ */
 bool XboxWireless_IsDevice(uint16_t vendorId, uint16_t productId)
 {
 	return vendorId == XboxWireless_VendorId && productId == XboxWireless_ProductId;
 }
 
+/**
+ * @brief Extracts the right trigger value from an HID input report and updates the provided gamepad state for Xbox Wireless devices.
+ *
+ * Attempts to read the right trigger via HID usages across link-collection indices; if a valid usage value is obtained the function normalizes it to the range [0.0, 1.0] and assigns it to gs.rightTrigger. If no usage value is available and the report length is sufficient, a device-specific fallback parsing is applied to derive and clamp a trigger value. If neither method yields a value, gs.rightTrigger is left unchanged.
+ *
+ * @param vendorId USB vendor ID of the device.
+ * @param productId USB product ID of the device.
+ * @param sony If true, the function does nothing (used to skip processing for Sony devices).
+ * @param gs Mutable reference to the GamepadState to update the rightTrigger field.
+ * @param pp Pointer to HID preparsed data (PHIDP_PREPARSED_DATA).
+ * @param report Pointer to the HID input report buffer.
+ * @param rLen Length of the HID input report in bytes.
+ * @param numLinkCollectionNodes Number of link-collection nodes to query for usage values (uses 1 if zero).
+ */
 void XboxWireless_ApplyRightTrigger(uint16_t vendorId, uint16_t productId, bool sony,
                                     GamepadState& gs, void* pp,
                                     const char* report, unsigned long rLen, unsigned short numLinkCollectionNodes)
