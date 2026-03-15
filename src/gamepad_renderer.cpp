@@ -28,9 +28,9 @@ struct LayoutCoords {
 };
 
 static const LayoutCoords XBOX_LAYOUT = {
-	98.f, 192.f,   // D-pad lower-left
-	308.f, 98.f,   // face buttons
-	98.f, 152.f,   // left stick upper-left
+	160.f, 154.f,   // D-pad lower-left
+	275.f, 85.f,   // face buttons
+	125.f, 85.f,   // left stick upper-left
 	252.f, 158.f,  // right stick
 	72.f, 32.f, 162.f, 50.f,   // left bumper
 	238.f, 32.f, 328.f, 50.f,  // right bumper
