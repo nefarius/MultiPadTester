@@ -46,8 +46,8 @@ static const char* SONY_FACE_Y = "T";   // Triangle
 static const LayoutCoords SONY_LAYOUT = {
 	114.f, 92.5f,   // D-pad upper-left (Sony symmetrical)
 	285.f, 96.f,   // face buttons
-	98.f, 192.f,   // left stick lower-left (Sony symmetrical)
-	252.f, 158.f,  // right stick
+	160.f, 130.f,   // left stick lower-left (Sony symmetrical)
+	240.f, 130.f,  // right stick
 	72.f, 32.f, 162.f, 50.f,
 	238.f, 32.f, 328.f, 50.f,
 	58.f, 10.f, 88.f, 36.f,
