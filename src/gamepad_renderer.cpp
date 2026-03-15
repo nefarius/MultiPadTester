@@ -18,6 +18,10 @@ struct LayoutCoords {
 	float ltTlX, ltTlY, ltBrX, ltBrY;
 	float rtTlX, rtTlY, rtBrX, rtBrY;
 	float backX, backY, guideX, guideY, startX, startY;
+	const char* faceLabelA;  // bottom (A / Circle)
+	const char* faceLabelB;  // right  (B / Cross)
+	const char* faceLabelX;  // left   (X / Square)
+	const char* faceLabelY;  // top    (Y / Triangle)
 };
 
 static const LayoutCoords XBOX_LAYOUT = {
@@ -29,8 +33,15 @@ static const LayoutCoords XBOX_LAYOUT = {
 	238.f, 32.f, 328.f, 50.f,  // right bumper
 	58.f, 10.f, 88.f, 36.f,    // left trigger
 	312.f, 10.f, 342.f, 36.f,  // right trigger
-	182.f, 88.f, 200.f, 100.f, 218.f, 88.f  // Back, Guide, Start
+	182.f, 88.f, 200.f, 100.f, 218.f, 88.f,  // Back, Guide, Start
+	"A", "B", "X", "Y"
 };
+
+// PlayStation: Circle (A), Cross (B), Square (X), Triangle (Y) — ASCII so default font works
+static const char* SONY_FACE_A = "O";   // Circle
+static const char* SONY_FACE_B = "X";   // Cross
+static const char* SONY_FACE_X = "S";   // Square
+static const char* SONY_FACE_Y = "T";   // Triangle
 
 static const LayoutCoords SONY_LAYOUT = {
 	98.f, 152.f,   // D-pad upper-left (Sony symmetrical)
@@ -41,7 +52,8 @@ static const LayoutCoords SONY_LAYOUT = {
 	238.f, 32.f, 328.f, 50.f,
 	58.f, 10.f, 88.f, 36.f,
 	312.f, 10.f, 342.f, 36.f,
-	182.f, 88.f, 200.f, 100.f, 218.f, 88.f  // Share, PS, Options
+	182.f, 88.f, 200.f, 100.f, 218.f, 88.f,  // Share, PS, Options
+	SONY_FACE_A, SONY_FACE_B, SONY_FACE_X, SONY_FACE_Y
 };
 
 static const LayoutCoords& GetLayoutCoords(LayoutType t) {
@@ -116,17 +128,20 @@ static void DrawDPad(ImDrawList* dl, const Layout& L, const GamepadState& gs, fl
             ImVec2(center.x + arm, center.y + w * 0.5f), Lit(), rnd);
 }
 
-static void DrawFaceButtons(ImDrawList* dl, const Layout& L, const GamepadState& gs, float cx, float cy) {
+static void DrawFaceButtons(ImDrawList* dl, const Layout& L, const GamepadState& gs,
+                            float cx, float cy,
+                            const char* labelA, const char* labelB,
+                            const char* labelX, const char* labelY) {
     ImVec2 center = L.P(cx, cy);
     float spread = L.S(18);
     float r      = L.S(11);
 
     struct FaceBtn { float dx; float dy; Button btn; ImU32 col; const char* label; };
     std::array btns = {
-        FaceBtn{  0,  spread, Button::A, ColorA(), "A" },
-        FaceBtn{  spread,  0, Button::B, ColorB(), "B" },
-        FaceBtn{ -spread,  0, Button::X, ColorX(), "X" },
-        FaceBtn{  0, -spread, Button::Y, ColorY(), "Y" },
+        FaceBtn{  0,  spread, Button::A, ColorA(), labelA },
+        FaceBtn{  spread,  0, Button::B, ColorB(), labelB },
+        FaceBtn{ -spread,  0, Button::X, ColorX(), labelX },
+        FaceBtn{  0, -spread, Button::Y, ColorY(), labelY },
     };
 
     for (auto& fb : btns) {
@@ -283,7 +298,8 @@ void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
 
     const LayoutCoords& c = GetLayoutCoords(layoutType);
     DrawDPad(dl, L, gs, c.dpadX, c.dpadY);
-    DrawFaceButtons(dl, L, gs, c.faceX, c.faceY);
+    DrawFaceButtons(dl, L, gs, c.faceX, c.faceY,
+                   c.faceLabelA, c.faceLabelB, c.faceLabelX, c.faceLabelY);
 
     DrawThumbstick(dl, L, L.P(c.leftStickX, c.leftStickY), gs.leftStickX, gs.leftStickY,
                    gs.IsPressed(Button::LeftThumb));
