@@ -5,6 +5,7 @@
 #include <Windows.h>
 #include <Shellapi.h>
 #include <tchar.h>
+#include <algorithm>
 #include <cctype>
 #include <cfloat>
 #include <format>
@@ -36,6 +37,7 @@ struct AppPrefs
 	int windowY = 0;
 	int windowW = 0;  // 0 = use default position/size
 	int windowH = 0;
+	int lastTabIndex = 0;  // backend tab index to restore on launch
 };
 
 static std::wstring GetConfigPath()
@@ -108,6 +110,10 @@ static void LoadConfig(AppPrefs& prefs)
 		{
 			try { prefs.windowH = std::stoi(val); } catch (...) {}
 		}
+		else if (key == "LastTabIndex")
+		{
+			try { prefs.lastTabIndex = std::stoi(val); } catch (...) {}
+		}
 	}
 	// Treat invalid dimensions as "not set"
 	if (prefs.windowW <= 0 || prefs.windowH <= 0)
@@ -129,6 +135,7 @@ static void SaveConfig(const AppPrefs& prefs)
 	f << "WindowY=" << prefs.windowY << "\n";
 	f << "WindowW=" << prefs.windowW << "\n";
 	f << "WindowH=" << prefs.windowH << "\n";
+	f << "LastTabIndex=" << prefs.lastTabIndex << "\n";
 }
 
 static bool IsWindowRectPlausible(int x, int y, int w, int h)
@@ -358,18 +365,28 @@ int APIENTRY wWinMain(
 
 		if (ImGui::BeginTabBar("##BackendTabs"))
 		{
-			for (auto& b : backends)
+			static bool restoreTabPending = true;
+			const int numTabs = static_cast<int>(backends.size());
+			const int tabToRestore = (numTabs > 0 && restoreTabPending)
+				? std::clamp(g_prefs.lastTabIndex, 0, numTabs - 1) : -1;
+
+			for (int idx = 0; idx < numTabs; ++idx)
 			{
+				auto& b = backends[idx];
 				auto slots_view = std::views::iota(0, b->GetMaxSlots());
 				int connected = static_cast<int>(std::ranges::count_if(
 					slots_view, [&](int i) { return b->GetState(i).connected; }));
 
 				auto tabLabel = std::format("{} ({})###{}", b->GetName(), connected, b->GetName());
 
-				bool tabOpen = ImGui::BeginTabItem(tabLabel.c_str());
+				ImGuiTabItemFlags tabFlags = (idx == tabToRestore) ? ImGuiTabItemFlags_SetSelected : 0;
+				bool tabOpen = ImGui::BeginTabItem(tabLabel.c_str(), nullptr, tabFlags);
+				if (idx == tabToRestore)
+					restoreTabPending = false;
 
 				if (tabOpen)
 				{
+					g_prefs.lastTabIndex = idx;
 					const char* name = b->GetName();
 					const char* description =
 						(name == XInputBackend::Name)    ? "Only Xbox-compatible devices will show up here."
