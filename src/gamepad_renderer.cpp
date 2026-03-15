@@ -18,10 +18,13 @@ struct LayoutCoords {
 	float ltTlX, ltTlY, ltBrX, ltBrY;
 	float rtTlX, rtTlY, rtBrX, rtBrY;
 	float backX, backY, guideX, guideY, startX, startY;
-	const char* faceLabelA;  // bottom (A / Circle)
-	const char* faceLabelB;  // right  (B / Cross)
-	const char* faceLabelX;  // left   (X / Square)
-	const char* faceLabelY;  // top    (Y / Triangle)
+	const char* faceLabelA;
+	const char* faceLabelB;
+	const char* faceLabelX;
+	const char* faceLabelY;
+	const char* backLabel;   // Back / Share
+	const char* guideLabel;  // Guide / PS
+	const char* startLabel;  // Start / Options
 };
 
 static const LayoutCoords XBOX_LAYOUT = {
@@ -33,8 +36,9 @@ static const LayoutCoords XBOX_LAYOUT = {
 	238.f, 32.f, 328.f, 50.f,  // right bumper
 	58.f, 10.f, 88.f, 36.f,    // left trigger
 	312.f, 10.f, 342.f, 36.f,  // right trigger
-	182.f, 88.f, 200.f, 100.f, 218.f, 88.f,  // Back, Guide, Start
-	"A", "B", "X", "Y"
+	182.f, 88.f, 200.f, 100.f, 218.f, 88.f,
+	"A", "B", "X", "Y",
+	"Back", "Guide", "Start"
 };
 
 // PlayStation: Circle (A), Cross (B), Square (X), Triangle (Y) — ASCII so default font works
@@ -52,8 +56,9 @@ static const LayoutCoords SONY_LAYOUT = {
 	238.f, 32.f, 328.f, 50.f,
 	58.f, 10.f, 88.f, 36.f,
 	312.f, 10.f, 342.f, 36.f,
-	182.f, 88.f, 200.f, 100.f, 218.f, 88.f,  // Share, PS, Options
-	SONY_FACE_A, SONY_FACE_B, SONY_FACE_X, SONY_FACE_Y
+	182.f, 88.f, 200.f, 100.f, 218.f, 88.f,
+	SONY_FACE_A, SONY_FACE_B, SONY_FACE_X, SONY_FACE_Y,
+	"Share", "PS", "Options"
 };
 
 static const LayoutCoords& GetLayoutCoords(LayoutType t) {
@@ -312,11 +317,11 @@ void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
     DrawTrigger(dl, L, L.P(c.ltTlX, c.ltTlY), L.P(c.ltBrX, c.ltBrY), gs.leftTrigger);
     DrawTrigger(dl, L, L.P(c.rtTlX, c.rtTlY), L.P(c.rtBrX, c.rtBrY), gs.rightTrigger);
 
-    DrawSmallButton(dl, L, L.P(c.backX, c.backY), L.S(28), L.S(12), "Back",
+    DrawSmallButton(dl, L, L.P(c.backX, c.backY), L.S(28), L.S(12), c.backLabel,
                     gs.IsPressed(Button::Back));
-    DrawSmallButton(dl, L, L.P(c.guideX, c.guideY), L.S(22), L.S(12), "Guide",
+    DrawSmallButton(dl, L, L.P(c.guideX, c.guideY), L.S(22), L.S(12), c.guideLabel,
                     gs.IsPressed(Button::Guide));
-    DrawSmallButton(dl, L, L.P(c.startX, c.startY), L.S(28), L.S(12), "Start",
+    DrawSmallButton(dl, L, L.P(c.startX, c.startY), L.S(28), L.S(12), c.startLabel,
                     gs.IsPressed(Button::Start));
 
     {
