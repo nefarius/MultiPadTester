@@ -48,7 +48,8 @@ void XboxWireless_ApplyRightTrigger(uint16_t vendorId, uint16_t productId, bool 
 		                              &rzVal, preparsed, const_cast<char*>(report), rLen);
 		if (rzStatus == HIDP_STATUS_SUCCESS)
 		{
-			// Same as NormTrigger fallback for invalid range (centered 16-bit).
+			// Xbox Wireless reports Rz as a centered 16-bit value (center ≈ 32768); normalize with
+			// (rzVal - 32768) / 32767 and clamp to [0,1] so rest=0 and full press=1.
 			gs.rightTrigger = std::clamp((static_cast<float>(rzVal) - 32768.0f) / 32767.0f, 0.0f, 1.0f);
 			return;
 		}
@@ -56,7 +57,10 @@ void XboxWireless_ApplyRightTrigger(uint16_t vendorId, uint16_t productId, bool 
 
 	if (rLen >= 11)
 	{
-		const size_t dataStart = (rLen > 0) ? 1u : 0u;
+		// Fallback when HidP_GetUsageValue fails: the device's raw HID report encodes trigger
+		// pressure inverted (raw 0 -> 1.0, 128 -> 0.0). Values >128 are left-trigger territory
+		// and are treated as invalid for right trigger (gs.rightTrigger reset to 0 per device spec).
+		const size_t dataStart = 1u;
 		const size_t triggerWordOffset = dataStart + 8u;
 		uint8_t combined = static_cast<unsigned char>(report[triggerWordOffset + 1]);
 		if (combined <= 128u)

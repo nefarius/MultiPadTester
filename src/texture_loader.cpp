@@ -135,7 +135,13 @@ ID3D11ShaderResourceView* LoadTextureFromPngMemory(ID3D11Device* device,
     if (!device || !pngData || pngSize == 0)
         return nullptr;
 
-    (void)CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (coHr != S_OK && coHr != S_FALSE)
+    {
+        if (coHr == RPC_E_CHANGED_MODE)
+            OutputDebugStringA("LoadTextureFromPngMemory: COM already initialized with a different threading model (RPC_E_CHANGED_MODE).\n");
+        return nullptr;
+    }
 
     std::vector<uint8_t> rgba;
     int width = 0, height = 0;

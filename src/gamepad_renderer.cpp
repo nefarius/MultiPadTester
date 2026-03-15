@@ -349,7 +349,7 @@ void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
         return;
     }
 
-    if (bodyTexture != nullptr) {
+    if (bodyTexture != GamepadRenderer::kNoBodyTexture) {
         ImVec2 tl = L.P(0.f, 0.f);
         ImVec2 br = L.P(textureSizeLogical.x, textureSizeLogical.y);
         dl->AddImage(bodyTexture, tl, br, ImVec2(0.f, 0.f), ImVec2(1.f, 1.f));

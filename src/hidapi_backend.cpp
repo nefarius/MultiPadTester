@@ -533,8 +533,12 @@ float HidApiBackend::NormStick(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	LONG lo = vc.LogicalMin, hi = vc.LogicalMax;
 	if (lo >= hi) {
-		// Fallback for invalid/mangled range (e.g. LogicalMax 65535 cast to LONG as -1): assume 16-bit unsigned axis
-		const float mid = 32767.5f, half = 32767.5f;
+		// Fallback for invalid/mangled range: derive unsigned range from vc.BitSize.
+		ULONG maxVal = 0xFFFFu;
+		if (vc.BitSize > 0u && vc.BitSize <= 31u)
+			maxVal = (1u << vc.BitSize) - 1u;
+		const float maxF = static_cast<float>(maxVal);
+		const float mid = maxF * 0.5f, half = maxF * 0.5f;
 		float v = static_cast<float>(raw);
 		return std::clamp((v - mid) / half, -1.0f, 1.0f);
 	}
@@ -561,8 +565,14 @@ float HidApiBackend::NormTrigger(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 	const LONG lo = vc.LogicalMin;
 	const LONG hi = vc.LogicalMax;
 	if (lo >= hi) {
-		// Fallback: assume 16-bit axis with rest at center (32768); map to 0..1 so rest=0, full=1
-		return std::clamp((static_cast<float>(raw) - 32768.0f) / 32767.0f, 0.0f, 1.0f);
+		// Fallback: derive unsigned range from vc.BitSize, center at max/2; map upper half to [0,1] (rest=0, full=1).
+		ULONG maxVal = 0xFFFFu;
+		if (vc.BitSize > 0u && vc.BitSize <= 31u)
+			maxVal = (1u << vc.BitSize) - 1u;
+		const float maxF = static_cast<float>(maxVal);
+		const float mid = maxF * 0.5f, half = maxF * 0.5f;
+		float n = (static_cast<float>(raw) - mid) / half;
+		return std::clamp(n, 0.0f, 1.0f);
 	}
 	float v = static_cast<float>(ToSigned(raw, vc));
 	return std::clamp((v - lo) / static_cast<float>(hi - lo), 0.0f, 1.0f);

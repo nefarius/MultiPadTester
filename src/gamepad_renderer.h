@@ -46,6 +46,9 @@
 	 */
 	enum class LayoutType { Xbox, Sony };
 
+	/** Sentinel for "no body texture" (valid for both pointer and integer ImTextureID backends). */
+	inline constexpr ImTextureID kNoBodyTexture = static_cast<ImTextureID>(0);
+
 	struct Layout
 	{
 		ImVec2 origin;
@@ -62,7 +65,7 @@
 	void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
 	                 const GamepadState& gs, int slotIndex, const char* backendName,
 	                 const char* displayName = nullptr,
-	                 ImTextureID bodyTexture = nullptr,
+	                 ImTextureID bodyTexture = kNoBodyTexture,
 	                 ImVec2 textureSizeLogical = ImVec2(400.f, 280.f),
 	                 LayoutType layoutType = LayoutType::Xbox);
 } // namespace GamepadRenderer
