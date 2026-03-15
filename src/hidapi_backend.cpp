@@ -1,8 +1,11 @@
 #include "hidapi_backend.h"
 #include "sony_layout.h"
 #include "usb_names.h"
+#include "xbox_wireless_hid.h"
 #include <algorithm>
+#include <format>
 #include <ranges>
+#include <string>
 #include <utility>
 #include <hidusage.h>
 
@@ -331,7 +334,19 @@ void HidApiBackend::StartRead(DeviceInfo& dev)
 	dev.readPending = false;
 }
 
-// ── report parsing ───────────────────────────────────────────
+/**
+ * @brief Parse a HID input report and update the corresponding gamepad state.
+ *
+ * Parses the raw HID report in dev.readBuf (length bytesRead), extracts button,
+ * hat, axis, and trigger values (with device-specific mappings for Sony/Xbox),
+ * applies Xbox wireless right-trigger adjustment when applicable, and writes the
+ * results into the backend's GamepadState for dev.slot. If the report is empty,
+ * the preparsed data is missing, or the slot is out of range, no state is modified.
+ *
+ * @param dev DeviceInfo containing the report buffer, preparsed data, value capabilities,
+ *            vendor/product IDs, and the target slot whose state will be updated.
+ * @param bytesRead Number of bytes of valid report data in dev.readBuf.
+ */
 
 void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 {
@@ -363,9 +378,11 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 		}
 	}
 
+	const UCHAR reportId = (rLen > 0) ? static_cast<UCHAR>(report[0]) : 0;
 	for (const auto& vc : dev.valueCaps)
 	{
 		if (vc.UsagePage != HID_USAGE_PAGE_GENERIC) continue;
+		if (vc.ReportID != 0 && (rLen == 0 || reportId != vc.ReportID)) continue;
 
 		USAGE uMin = vc.IsRange ? vc.Range.UsageMin : vc.NotRange.Usage;
 		USAGE uMax = vc.IsRange ? vc.Range.UsageMax : vc.NotRange.Usage;
@@ -373,7 +390,7 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 		for (USAGE u = uMin; u <= uMax; ++u)
 		{
 			ULONG val = 0;
-			if (HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, u,
+			if (HidP_GetUsageValue(HidP_Input, vc.UsagePage, vc.LinkCollection, u,
 			                       &val, pp, report, rLen) != HIDP_STATUS_SUCCESS)
 				continue;
 
@@ -419,6 +436,9 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 			}
 		}
 	}
+
+	XboxWireless_ApplyRightTrigger(dev.vendorId, dev.productId, sony, gs, pp, report, rLen,
+		(dev.caps.NumberLinkCollectionNodes > 0) ? dev.caps.NumberLinkCollectionNodes : 1);
 
 	gs.buttons = btns;
 }
@@ -498,21 +518,62 @@ LONG HidApiBackend::ToSigned(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 	return static_cast<LONG>(raw);
 }
 
+/**
+ * @brief Converts a raw axis reading into a normalized stick value in the range [-1, 1].
+ *
+ * Uses the range information from `vc` (LogicalMin/LogicalMax) to center and scale the raw value.
+ * If `vc.LogicalMin >= vc.LogicalMax` (invalid or mangled range), treats the input as a 16-bit
+ * unsigned axis centered at 32767.5 and applies a fallback normalization.
+ *
+ * @param raw Raw axis sample value as read from the HID report.
+ * @param vc HID value capability describing logical range and bit size for the axis.
+ * @return float Normalized axis value clamped to [-1.0, 1.0].
+ */
 float HidApiBackend::NormStick(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	LONG lo = vc.LogicalMin, hi = vc.LogicalMax;
-	if (lo >= hi) return 0.0f;
+	if (lo >= hi) {
+		// Fallback for invalid/mangled range: derive unsigned range from vc.BitSize.
+		ULONG maxVal = 0xFFFFu;
+		if (vc.BitSize > 0u && vc.BitSize <= 31u)
+			maxVal = (1u << vc.BitSize) - 1u;
+		const float maxF = static_cast<float>(maxVal);
+		const float mid = maxF * 0.5f, half = maxF * 0.5f;
+		float v = static_cast<float>(raw);
+		return std::clamp((v - mid) / half, -1.0f, 1.0f);
+	}
 	float v = static_cast<float>(ToSigned(raw, vc));
 	float mid = (lo + hi) / 2.0f;
 	float half = (hi - lo) / 2.0f;
 	return std::clamp((v - mid) / half, -1.0f, 1.0f);
 }
 
+/**
+ * @brief Normalizes a trigger axis value into the range [0, 1].
+ *
+ * Maps the raw usage value to a floating-point trigger position where 0.0 is released and 1.0 is fully pressed.
+ * When the value capabilities specify a valid logical range (LogicalMin < LogicalMax), the raw value is interpreted
+ * according to that range and linearly mapped to [0, 1]. If the logical range is invalid or mangled (LogicalMin >= LogicalMax),
+ * a fallback mapping assumes a 16-bit unsigned axis with center at 32768 and maps values from center..max to 0..1.
+ *
+ * @param raw Raw usage value read from the device.
+ * @param vc HID value capabilities describing logical range and signedness.
+ * @return float Normalized trigger value in the closed interval [0.0, 1.0].
+ */
 float HidApiBackend::NormTrigger(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	const LONG lo = vc.LogicalMin;
 	const LONG hi = vc.LogicalMax;
-	if (lo >= hi) return 0.0f;
+	if (lo >= hi) {
+		// Fallback: derive unsigned range from vc.BitSize, center at max/2; map upper half to [0,1] (rest=0, full=1).
+		ULONG maxVal = 0xFFFFu;
+		if (vc.BitSize > 0u && vc.BitSize <= 31u)
+			maxVal = (1u << vc.BitSize) - 1u;
+		const float maxF = static_cast<float>(maxVal);
+		const float mid = maxF * 0.5f, half = maxF * 0.5f;
+		float n = (static_cast<float>(raw) - mid) / half;
+		return std::clamp(n, 0.0f, 1.0f);
+	}
 	float v = static_cast<float>(ToSigned(raw, vc));
 	return std::clamp((v - lo) / static_cast<float>(hi - lo), 0.0f, 1.0f);
 }

@@ -18,7 +18,7 @@ add_executable(MultiPadTester WIN32
 source_group("Source Files" FILES ${SOURCE_FILES})
 source_group("Header Files" FILES ${HEADER_FILES})
 
-target_include_directories(MultiPadTester PRIVATE src)
+target_include_directories(MultiPadTester PRIVATE src res)
 
 target_link_libraries(MultiPadTester PRIVATE
     imgui::imgui

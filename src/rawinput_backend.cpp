@@ -1,8 +1,11 @@
 #include "rawinput_backend.h"
 #include "sony_layout.h"
 #include "usb_names.h"
+#include "xbox_wireless_hid.h"
 #include <algorithm>
+#include <format>
 #include <ranges>
+#include <string>
 #include <utility>
 #include <hidusage.h>
 
@@ -111,6 +114,16 @@ bool RawInputBackend::IsGamepadOrJoystick(HANDLE h)
 		(info.hid.usUsage == HID_USAGE_GENERIC_JOYSTICK || info.hid.usUsage == HID_USAGE_GENERIC_GAMEPAD);
 }
 
+/**
+ * @brief Initializes DeviceInfo for a raw HID device and retrieves its HID descriptors.
+ *
+ * Populates the provided DeviceInfo with the device handle, vendor/product identifiers (when available),
+ * the preparsed HID buffer, HID capabilities, and input value capability descriptors.
+ *
+ * @param h Raw input device handle to initialize from.
+ * @param d Output structure that will be filled with preparsed HID data, caps, value caps, vendorId, productId, and handle.
+ * @return true if the device information and required HID descriptors were successfully retrieved and stored in `d`, false if any required data (preparsed buffer or HID capabilities) could not be obtained.
+ */
 bool RawInputBackend::SetupDevice(HANDLE h, DeviceInfo& d)
 {
 	d.handle = h;
@@ -149,6 +162,7 @@ bool RawInputBackend::SetupDevice(HANDLE h, DeviceInfo& d)
 		else
 			d.valueCaps.resize(n);
 	}
+
 	return true;
 }
 
@@ -222,6 +236,18 @@ void RawInputBackend::HandleRawInput(const HRAWINPUT hri)
 	ParseReport(dev, raw->data.hid);
 }
 
+/**
+ * @brief Parse raw HID reports for a device and update its gamepad state.
+ *
+ * Processes each report in the provided RAWHID packet, extracts button usages,
+ * axis and hat values (honoring per-report-ID filtering), applies vendor-specific
+ * mappings (including Sony mappings and vendor-specific right-trigger adjustments),
+ * and updates the backend's GamepadState for the device's assigned slot.
+ *
+ * @param dev DeviceInfo for the source device; its assigned slot is used to locate
+ *            the GamepadState that will be updated.
+ * @param hid Raw HID packet containing one or more HID reports to parse.
+ */
 void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 {
 	const auto pp = PP(dev);
@@ -249,9 +275,11 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 			}
 		}
 
+		const UCHAR reportId = (rLen > 0) ? static_cast<UCHAR>(report[0]) : 0;
 		for (const auto& vc : dev.valueCaps)
 		{
 			if (vc.UsagePage != HID_USAGE_PAGE_GENERIC) continue;
+			if (vc.ReportID != 0 && (rLen == 0 || reportId != vc.ReportID)) continue;
 
 			const USAGE uMin = vc.IsRange ? vc.Range.UsageMin : vc.NotRange.Usage;
 			const USAGE uMax = vc.IsRange ? vc.Range.UsageMax : vc.NotRange.Usage;
@@ -259,7 +287,7 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 			for (USAGE u = uMin; u <= uMax; ++u)
 			{
 				ULONG val = 0;
-				if (HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, u,
+				if (HidP_GetUsageValue(HidP_Input, vc.UsagePage, vc.LinkCollection, u,
 				                       &val, pp, report, rLen) != HIDP_STATUS_SUCCESS)
 					continue;
 
@@ -305,6 +333,9 @@ void RawInputBackend::ParseReport(DeviceInfo& dev, RAWHID& hid)
 				}
 			}
 		}
+
+		XboxWireless_ApplyRightTrigger(dev.vendorId, dev.productId, sony, gs, pp, report, rLen,
+			(dev.caps.NumberLinkCollectionNodes > 0) ? dev.caps.NumberLinkCollectionNodes : 1);
 
 		gs.buttons = btns;
 	}
@@ -371,20 +402,62 @@ LONG RawInputBackend::ToSigned(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 	return static_cast<LONG>(raw);
 }
 
+/**
+ * @brief Normalizes a stick axis value to the range [-1, 1].
+ *
+ * Converts a raw HID axis reading to a centered floating-point value using the logical
+ * minimum and maximum from the provided value capability. If the capability's logical
+ * range is invalid (LogicalMin >= LogicalMax), treats the input as a 16-bit unsigned
+ * axis with midpoint 32767.5 as a fallback. The result is clamped to [-1, 1].
+ *
+ * @param raw Raw axis value from the HID report.
+ * @param vc HID value capability describing the axis's logical range and bit size.
+ * @return float Normalized axis value in the range [-1, 1].
+ */
 float RawInputBackend::NormStick(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	LONG lo = vc.LogicalMin, hi = vc.LogicalMax;
-	if (lo >= hi) return 0.0f;
+	if (lo >= hi) {
+		// Fallback for invalid/mangled range: derive unsigned range from vc.BitSize.
+		ULONG maxVal = 0xFFFFu;
+		if (vc.BitSize > 0u && vc.BitSize <= 31u)
+			maxVal = (1u << vc.BitSize) - 1u;
+		const float maxF = static_cast<float>(maxVal);
+		const float mid = maxF * 0.5f, half = maxF * 0.5f;
+		float v = static_cast<float>(raw);
+		return std::clamp((v - mid) / half, -1.0f, 1.0f);
+	}
 	float v = static_cast<float>(ToSigned(raw, vc));
 	float mid = (lo + hi) / 2.0f;
 	float half = (hi - lo) / 2.0f;
 	return std::clamp((v - mid) / half, -1.0f, 1.0f);
 }
 
+/**
+ * @brief Normalizes a raw trigger axis value into the range [0, 1].
+ *
+ * Uses the HID value cap's logical minimum and maximum to map the axis so that the logical
+ * minimum becomes 0 and the logical maximum becomes 1. If the value cap contains an invalid
+ * range (logical minimum greater than or equal to logical maximum), falls back to treating
+ * the input as a 16-bit axis with rest at 32768 and maps that center-based range into [0, 1].
+ *
+ * @param raw The raw axis value read from the HID report.
+ * @param vc  The HIDP_VALUE_CAPS describing the axis (logical range, bit size, etc.).
+ * @return float A clamped value between 0.0 and 1.0 representing the normalized trigger position.
+ */
 float RawInputBackend::NormTrigger(const ULONG raw, const HIDP_VALUE_CAPS& vc)
 {
 	LONG lo = vc.LogicalMin, hi = vc.LogicalMax;
-	if (lo >= hi) return 0.0f;
+	if (lo >= hi) {
+		// Fallback: derive unsigned range from vc.BitSize, center at max/2; map upper half to [0,1] (rest=0, full=1).
+		ULONG maxVal = 0xFFFFu;
+		if (vc.BitSize > 0u && vc.BitSize <= 31u)
+			maxVal = (1u << vc.BitSize) - 1u;
+		const float maxF = static_cast<float>(maxVal);
+		const float mid = maxF * 0.5f, half = maxF * 0.5f;
+		float n = (static_cast<float>(raw) - mid) / half;
+		return std::clamp(n, 0.0f, 1.0f);
+	}
 	float v = static_cast<float>(ToSigned(raw, vc));
 	return std::clamp((v - lo) / static_cast<float>(hi - lo), 0.0f, 1.0f);
 }

@@ -1,0 +1,6 @@
+Controller body textures (400×280 recommended for overlay alignment):
+
+  xbox_body.png     — used for Xbox and other non-Sony devices.
+  dualsense_body.png — used when a Sony device is detected (DualSense, DualShock, etc.).
+
+Replace these PNGs with your own art to change how each layout looks.

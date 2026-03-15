@@ -5,6 +5,8 @@
 #include <Windows.h>
 #include <Shellapi.h>
 #include <tchar.h>
+#include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <format>
 #include <fstream>
@@ -21,6 +23,8 @@
 #include "dinput_backend.h"
 #include "hidapi_backend.h"
 #include "gamepad_renderer.h"
+#include "texture_loader.h"
+#include "resource.h"
 
 #define IDM_ABOUT 0xF200
 #define IDM_PREFERENCES 0xF210
@@ -33,8 +37,18 @@ struct AppPrefs
 	int windowY = 0;
 	int windowW = 0;  // 0 = use default position/size
 	int windowH = 0;
+	int lastTabIndex = 0;  // backend tab index to restore on launch
 };
 
+/**
+ * @brief Get the full path to the application's config file in the user's APPDATA folder.
+ *
+ * Creates a "MultiPadTester" subdirectory inside the user's APPDATA folder if it does not exist,
+ * and returns the path to "config.ini" inside that directory.
+ *
+ * @return std::wstring The full config file path, or an empty string if the APPDATA environment
+ *         variable could not be retrieved.
+ */
 static std::wstring GetConfigPath()
 {
 	wchar_t appdata[512]{};
@@ -45,6 +59,21 @@ static std::wstring GetConfigPath()
 	return dir + L"\\config.ini";
 }
 
+/**
+ * @brief Loads application preferences from the on-disk config file.
+ *
+ * Reads the config file located in the application's AppData folder and applies recognized keys
+ * from the [Settings] section into the provided AppPrefs structure. Supported keys:
+ * RefreshRate, VSync, WindowX, WindowY, WindowW, WindowH, LastTabIndex.
+ *
+ * - If the config file is missing or unreadable, the function leaves prefs unchanged.
+ * - RefreshRate is accepted only if it equals 0, 60, 75, 120, or 144; other values are ignored.
+ * - Boolean VSync accepts "1", "true", or "yes" as true.
+ * - Integer parsing failures are ignored and do not modify the corresponding field.
+ * - If the resulting WindowW or WindowH is less than or equal to zero, both are reset to 0.
+ *
+ * @param prefs Reference to an AppPrefs instance to populate with values from disk.
+ */
 static void LoadConfig(AppPrefs& prefs)
 {
 	std::wstring path = GetConfigPath();
@@ -105,12 +134,28 @@ static void LoadConfig(AppPrefs& prefs)
 		{
 			try { prefs.windowH = std::stoi(val); } catch (...) {}
 		}
+		else if (key == "LastTabIndex")
+		{
+			try { prefs.lastTabIndex = std::stoi(val); } catch (...) {}
+		}
 	}
 	// Treat invalid dimensions as "not set"
 	if (prefs.windowW <= 0 || prefs.windowH <= 0)
 		prefs.windowW = prefs.windowH = 0;
 }
 
+/**
+ * @brief Persists application preferences to the user's configuration file.
+ *
+ * Writes the AppPrefs values into the application's INI-style config file under a
+ * [Settings] section so they can be restored on next launch.
+ *
+ * @param prefs Preference values to persist. The following fields are written:
+ *              - refreshRate: monitor refresh rate selection (0 means monitor default)
+ *              - vsync: vertical sync enabled flag
+ *              - windowX, windowY, windowW, windowH: saved window position and size
+ *              - lastTabIndex: backend tab index to restore on launch
+ */
 static void SaveConfig(const AppPrefs& prefs)
 {
 	std::wstring path = GetConfigPath();
@@ -126,8 +171,21 @@ static void SaveConfig(const AppPrefs& prefs)
 	f << "WindowY=" << prefs.windowY << "\n";
 	f << "WindowW=" << prefs.windowW << "\n";
 	f << "WindowH=" << prefs.windowH << "\n";
+	f << "LastTabIndex=" << prefs.lastTabIndex << "\n";
 }
 
+/**
+ * @brief Determines whether a proposed window rectangle is plausible for display.
+ *
+ * Ensures the width and height are within allowed bounds and that the window's
+ * top-left point lies on a connected monitor.
+ *
+ * @param x X coordinate of the window's top-left corner in screen pixels.
+ * @param y Y coordinate of the window's top-left corner in screen pixels.
+ * @param w Width of the window in pixels.
+ * @param h Height of the window in pixels.
+ * @return true if the size is within 320..4096 and the top-left point is on a monitor, false otherwise.
+ */
 static bool IsWindowRectPlausible(int x, int y, int w, int h)
 {
 	constexpr int minSize = 320, maxSize = 4096;
@@ -297,6 +355,23 @@ int APIENTRY wWinMain(
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_d3d.device, g_d3d.deviceCtx);
 
+	ImTextureID controllerTextureXbox = nullptr;
+	ImTextureID controllerTextureDualSense = nullptr;
+	{
+		auto loadBody = [&](int id) -> ImTextureID {
+			HRSRC hrsrc = FindResourceW(hInstance, MAKEINTRESOURCEW(id), RT_RCDATA);
+			if (!hrsrc) return nullptr;
+			HGLOBAL hglob = LoadResource(hInstance, hrsrc);
+			if (!hglob) return nullptr;
+			const void* data = LockResource(hglob);
+			const size_t size = SizeofResource(hInstance, hrsrc);
+			if (!data || size == 0) return nullptr;
+			return LoadTextureFromPngMemory(g_d3d.device, data, size, nullptr, nullptr);
+		};
+		controllerTextureXbox = loadBody(IDR_XBOX_BODY);
+		controllerTextureDualSense = loadBody(IDR_DUALSENSE_BODY);
+	}
+
 	std::vector<std::unique_ptr<IInputBackend>> backends;
 	backends.push_back(std::make_unique<XInputBackend>());
 	backends.push_back(std::make_unique<RawInputBackend>());
@@ -338,21 +413,31 @@ int APIENTRY wWinMain(
 
 		if (ImGui::BeginTabBar("##BackendTabs"))
 		{
-			for (auto& b : backends)
+			static bool restoreTabPending = true;
+			const int numTabs = static_cast<int>(backends.size());
+			const int tabToRestore = (numTabs > 0 && restoreTabPending)
+				? std::clamp(g_prefs.lastTabIndex, 0, numTabs - 1) : -1;
+
+			for (int idx = 0; idx < numTabs; ++idx)
 			{
+				auto& b = backends[idx];
 				auto slots_view = std::views::iota(0, b->GetMaxSlots());
 				int connected = static_cast<int>(std::ranges::count_if(
 					slots_view, [&](int i) { return b->GetState(i).connected; }));
 
 				auto tabLabel = std::format("{} ({})###{}", b->GetName(), connected, b->GetName());
 
-				bool tabOpen = ImGui::BeginTabItem(tabLabel.c_str());
+				ImGuiTabItemFlags tabFlags = (idx == tabToRestore) ? ImGuiTabItemFlags_SetSelected : 0;
+				bool tabOpen = ImGui::BeginTabItem(tabLabel.c_str(), nullptr, tabFlags);
+				if (idx == tabToRestore)
+					restoreTabPending = false;
 
 				if (tabOpen)
 				{
+					g_prefs.lastTabIndex = idx;
 					const char* name = b->GetName();
 					const char* description =
-						(name == XInputBackend::Name)    ? "Only Xbox-compatible devices will show up here."
+						(name == XInputBackend::Name)    ? "Extremely simple API; only Xbox-compatible devices will show up here."
 						: (name == RawInputBackend::Name) ? "Low-level with medium complexity; many XP-era games use this."
 						: (name == DInputBackend::Name)  ? "Legacy API; the oldest available approach; many legacy titles use this."
 						: (name == HidApiBackend::Name)  ? "Very verbose but most universal; many modern engines use this."
@@ -395,6 +480,15 @@ int APIENTRY wWinMain(
 						float cellH = area.y / rows;
 						float pad = 6.0f;
 
+						auto isSonyDevice = [](const char* name) {
+							if (!name || !name[0]) return false;
+							std::string lower(name);
+							for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+							for (const char* sub : {"dualsense", "dualshock", "sony", "playstation"})
+								if (lower.find(sub) != std::string::npos) return true;
+							return false;
+						};
+
 						for (int i = 0; i < total; ++i)
 						{
 							int col = i % cols;
@@ -403,9 +497,14 @@ int APIENTRY wWinMain(
 							           origin.y + row * cellH + pad);
 							ImVec2 size(cellW - pad * 2, cellH - pad * 2);
 
+							const bool sony = isSonyDevice(slots[i].displayName);
+							ImTextureID bodyTex = sony ? controllerTextureDualSense : controllerTextureXbox;
+							GamepadRenderer::LayoutType layoutType = sony ? GamepadRenderer::LayoutType::Sony : GamepadRenderer::LayoutType::Xbox;
+
 							GamepadRenderer::DrawGamepad(dl, pos, size,
 							                             *slots[i].state, slots[i].slotIndex,
-							                             slots[i].backendName, slots[i].displayName);
+							                             slots[i].backendName, slots[i].displayName,
+							                             bodyTex, ImVec2(400.f, 280.f), layoutType);
 						}
 					}
 
@@ -499,6 +598,8 @@ int APIENTRY wWinMain(
 
 	g_backends = nullptr;
 
+	ReleaseControllerTexture(static_cast<ID3D11ShaderResourceView*>(controllerTextureXbox));
+	ReleaseControllerTexture(static_cast<ID3D11ShaderResourceView*>(controllerTextureDualSense));
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
