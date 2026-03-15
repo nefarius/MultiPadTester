@@ -389,7 +389,7 @@ int APIENTRY wWinMain(
 					g_prefs.lastTabIndex = idx;
 					const char* name = b->GetName();
 					const char* description =
-						(name == XInputBackend::Name)    ? "Only Xbox-compatible devices will show up here."
+						(name == XInputBackend::Name)    ? "Extremely simple API; only Xbox-compatible devices will show up here."
 						: (name == RawInputBackend::Name) ? "Low-level with medium complexity; many XP-era games use this."
 						: (name == DInputBackend::Name)  ? "Legacy API; the oldest available approach; many legacy titles use this."
 						: (name == HidApiBackend::Name)  ? "Very verbose but most universal; many modern engines use this."
