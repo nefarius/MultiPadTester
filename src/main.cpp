@@ -5,6 +5,7 @@
 #include <Windows.h>
 #include <Shellapi.h>
 #include <tchar.h>
+#include <cctype>
 #include <cfloat>
 #include <format>
 #include <fstream>
@@ -299,20 +300,21 @@ int APIENTRY wWinMain(
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_d3d.device, g_d3d.deviceCtx);
 
-	ImTextureID controllerTexture = nullptr;
+	ImTextureID controllerTextureXbox = nullptr;
+	ImTextureID controllerTextureDualSense = nullptr;
 	{
-		HRSRC hrsrc = FindResourceW(hInstance, MAKEINTRESOURCEW(IDR_CONTROLLER_TEXTURE), RT_RCDATA);
-		if (hrsrc)
-		{
+		auto loadBody = [&](int id) -> ImTextureID {
+			HRSRC hrsrc = FindResourceW(hInstance, MAKEINTRESOURCEW(id), RT_RCDATA);
+			if (!hrsrc) return nullptr;
 			HGLOBAL hglob = LoadResource(hInstance, hrsrc);
-			if (hglob)
-			{
-				const void* data = LockResource(hglob);
-				const size_t size = SizeofResource(hInstance, hrsrc);
-				if (data && size != 0)
-					controllerTexture = LoadTextureFromPngMemory(g_d3d.device, data, size, nullptr, nullptr);
-			}
-		}
+			if (!hglob) return nullptr;
+			const void* data = LockResource(hglob);
+			const size_t size = SizeofResource(hInstance, hrsrc);
+			if (!data || size == 0) return nullptr;
+			return LoadTextureFromPngMemory(g_d3d.device, data, size, nullptr, nullptr);
+		};
+		controllerTextureXbox = loadBody(IDR_XBOX_BODY);
+		controllerTextureDualSense = loadBody(IDR_DUALSENSE_BODY);
 	}
 
 	std::vector<std::unique_ptr<IInputBackend>> backends;
@@ -413,6 +415,15 @@ int APIENTRY wWinMain(
 						float cellH = area.y / rows;
 						float pad = 6.0f;
 
+						auto isSonyDevice = [](const char* name) {
+							if (!name || !name[0]) return false;
+							std::string lower(name);
+							for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+							for (const char* sub : {"dualsense", "dualshock", "sony", "playstation"})
+								if (lower.find(sub) != std::string::npos) return true;
+							return false;
+						};
+
 						for (int i = 0; i < total; ++i)
 						{
 							int col = i % cols;
@@ -421,10 +432,14 @@ int APIENTRY wWinMain(
 							           origin.y + row * cellH + pad);
 							ImVec2 size(cellW - pad * 2, cellH - pad * 2);
 
+							const bool sony = isSonyDevice(slots[i].displayName);
+							ImTextureID bodyTex = sony ? controllerTextureDualSense : controllerTextureXbox;
+							GamepadRenderer::LayoutType layoutType = sony ? GamepadRenderer::LayoutType::Sony : GamepadRenderer::LayoutType::Xbox;
+
 							GamepadRenderer::DrawGamepad(dl, pos, size,
 							                             *slots[i].state, slots[i].slotIndex,
 							                             slots[i].backendName, slots[i].displayName,
-							                             controllerTexture);
+							                             bodyTex, ImVec2(400.f, 280.f), layoutType);
 						}
 					}
 
@@ -518,7 +533,8 @@ int APIENTRY wWinMain(
 
 	g_backends = nullptr;
 
-	ReleaseControllerTexture(static_cast<ID3D11ShaderResourceView*>(controllerTexture));
+	ReleaseControllerTexture(static_cast<ID3D11ShaderResourceView*>(controllerTextureXbox));
+	ReleaseControllerTexture(static_cast<ID3D11ShaderResourceView*>(controllerTextureDualSense));
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();

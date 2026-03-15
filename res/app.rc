@@ -1,3 +1,4 @@
 #include "resource.h"
 IDI_APPICON ICON "app.ico"
-IDR_CONTROLLER_TEXTURE RCDATA "..\\assets\\controller_body.png"
+IDR_XBOX_BODY RCDATA "..\\assets\\xbox_body.png"
+IDR_DUALSENSE_BODY RCDATA "..\\assets\\dualsense_body.png"

@@ -25,6 +25,8 @@
 	 */
 	namespace GamepadRenderer
 {
+	enum class LayoutType { Xbox, Sony };
+
 	struct Layout
 	{
 		ImVec2 origin;
@@ -42,5 +44,6 @@
 	                 const GamepadState& gs, int slotIndex, const char* backendName,
 	                 const char* displayName = nullptr,
 	                 ImTextureID bodyTexture = nullptr,
-	                 ImVec2 textureSizeLogical = ImVec2(400.f, 280.f));
+	                 ImVec2 textureSizeLogical = ImVec2(400.f, 280.f),
+	                 LayoutType layoutType = LayoutType::Xbox);
 } // namespace GamepadRenderer
