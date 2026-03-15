@@ -41,9 +41,9 @@ static const LayoutCoords XBOX_LAYOUT = {
 	"Back", "Guide", "Start"
 };
 
-// PlayStation: Circle (A), Cross (B), Square (X), Triangle (Y) — ASCII so default font works
-static const char* SONY_FACE_A = "O";   // Circle
-static const char* SONY_FACE_B = "X";   // Cross
+// PlayStation: A slot = south = Cross, B slot = east = Circle; Square (X), Triangle (Y) — ASCII so default font works
+static const char* SONY_FACE_A = "X";   // Cross (south)
+static const char* SONY_FACE_B = "O";   // Circle (east)
 static const char* SONY_FACE_X = "S";   // Square
 static const char* SONY_FACE_Y = "T";   // Triangle
 
