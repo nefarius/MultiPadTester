@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <wil/resource.h>
 
 class HidApiBackend final : public IInputBackend
 {
@@ -61,10 +62,22 @@ private:
 	struct DeviceInfo
 	{
 		std::wstring path;
-		HANDLE handle = INVALID_HANDLE_VALUE;
+		wil::unique_hfile handle;
+		wil::unique_handle readEvent;
 		OVERLAPPED overlapped{};
 		std::vector<BYTE> readBuf;
-		PHIDP_PREPARSED_DATA preparsed = nullptr;
+		struct UniquePreparsed
+		{
+			PHIDP_PREPARSED_DATA p = nullptr;
+			UniquePreparsed() = default;
+			explicit UniquePreparsed(PHIDP_PREPARSED_DATA q) : p(q) {}
+			~UniquePreparsed() { reset(); }
+			UniquePreparsed(UniquePreparsed&& other) noexcept : p(other.p) { other.p = nullptr; }
+			UniquePreparsed& operator=(UniquePreparsed&& other) noexcept { reset(other.p); other.p = nullptr; return *this; }
+			void reset(PHIDP_PREPARSED_DATA q = nullptr) { if (p) HidD_FreePreparsedData(p); p = q; }
+			PHIDP_PREPARSED_DATA get() const { return p; }
+			explicit operator bool() const { return p != nullptr; }
+		} preparsed;
 		HIDP_CAPS caps{};
 		std::vector<HIDP_VALUE_CAPS> valueCaps;
 		int slot = -1;

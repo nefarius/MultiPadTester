@@ -353,20 +353,20 @@ int APIENTRY wWinMain(
 	}
 
 	ImGui_ImplWin32_Init(hwnd);
-	ImGui_ImplDX11_Init(g_d3d.device, g_d3d.deviceCtx);
+	ImGui_ImplDX11_Init(g_d3d.device.get(), g_d3d.deviceCtx.get());
 
-	ImTextureID controllerTextureXbox = nullptr;
-	ImTextureID controllerTextureDualSense = nullptr;
+	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureXbox;
+	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureDualSense;
 	{
-		auto loadBody = [&](int id) -> ImTextureID {
+		auto loadBody = [&](int id) -> wil::com_ptr<ID3D11ShaderResourceView> {
 			HRSRC hrsrc = FindResourceW(hInstance, MAKEINTRESOURCEW(id), RT_RCDATA);
-			if (!hrsrc) return nullptr;
+			if (!hrsrc) return {};
 			HGLOBAL hglob = LoadResource(hInstance, hrsrc);
-			if (!hglob) return nullptr;
+			if (!hglob) return {};
 			const void* data = LockResource(hglob);
 			const size_t size = SizeofResource(hInstance, hrsrc);
-			if (!data || size == 0) return nullptr;
-			return LoadTextureFromPngMemory(g_d3d.device, data, size, nullptr, nullptr);
+			if (!data || size == 0) return {};
+			return LoadTextureFromPngMemory(g_d3d.device.get(), data, size, nullptr, nullptr);
 		};
 		controllerTextureXbox = loadBody(IDR_XBOX_BODY);
 		controllerTextureDualSense = loadBody(IDR_DUALSENSE_BODY);
@@ -498,7 +498,7 @@ int APIENTRY wWinMain(
 							ImVec2 size(cellW - pad * 2, cellH - pad * 2);
 
 							const bool sony = isSonyDevice(slots[i].displayName);
-							ImTextureID bodyTex = sony ? controllerTextureDualSense : controllerTextureXbox;
+							ImTextureID bodyTex = (sony ? controllerTextureDualSense : controllerTextureXbox).get();
 							GamepadRenderer::LayoutType layoutType = sony ? GamepadRenderer::LayoutType::Sony : GamepadRenderer::LayoutType::Xbox;
 
 							GamepadRenderer::DrawGamepad(dl, pos, size,
@@ -590,16 +590,15 @@ int APIENTRY wWinMain(
 		}
 
 		ImGui::Render();
-		g_d3d.deviceCtx->OMSetRenderTargets(1, &g_d3d.rtv, nullptr);
-		g_d3d.deviceCtx->ClearRenderTargetView(g_d3d.rtv, clearColor);
+		ID3D11RenderTargetView* rtv = g_d3d.rtv.get();
+		g_d3d.deviceCtx->OMSetRenderTargets(1, &rtv, nullptr);
+		g_d3d.deviceCtx->ClearRenderTargetView(rtv, clearColor);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		g_d3d.Present(g_prefs.vsync);
 	}
 
 	g_backends = nullptr;
 
-	ReleaseControllerTexture(static_cast<ID3D11ShaderResourceView*>(controllerTextureXbox));
-	ReleaseControllerTexture(static_cast<ID3D11ShaderResourceView*>(controllerTextureDualSense));
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();

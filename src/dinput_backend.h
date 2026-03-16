@@ -8,6 +8,7 @@
 #endif
 #include <dinput.h>
 #include <vector>
+#include <wil/com.h>
 
 class DInputBackend final : public IInputBackend
 {
@@ -49,11 +50,11 @@ public:
 	[[nodiscard]] const char* GetName() const override;
 	[[nodiscard]] const char* GetSlotDisplayName(int slot) const override;
 
-private:
+	private:
 	struct DeviceInfo
 	{
 		GUID instanceGuid{};
-		IDirectInputDevice8W* device = nullptr;
+		wil::com_ptr<IDirectInputDevice8W> device;
 		int slot = -1;
 		bool found = false;
 		uint16_t vendorId = 0;
@@ -62,7 +63,7 @@ private:
 	};
 
 	HWND hwnd_ = nullptr;
-	IDirectInput8W* di_ = nullptr;
+	wil::com_ptr<IDirectInput8W> di_;
 	std::vector<DeviceInfo> devices_;
 	GamepadState states_[kMaxDevices]{};
 	int pollCounter_ = 0;

@@ -4,6 +4,7 @@
   "version-string": "0.1.0",
   "description": "Gamepad/controller tester and visualizer using ImGui and DirectX 11",
   "dependencies": [
+    "wil",
     {
       "name": "imgui",
       "features": [
