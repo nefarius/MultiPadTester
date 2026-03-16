@@ -106,6 +106,23 @@ struct GameInputBackend::Impl
 	}
 };
 
+bool GameInputBackend::IsAvailable()
+{
+	__try
+	{
+		IGameInput* input = nullptr;
+		if (FAILED(GameInputCreate(&input)))
+			return false;
+		if (input)
+			input->Release();
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
+		return false;
+	}
+}
+
 GameInputBackend::GameInputBackend() : impl_(std::make_unique<Impl>()) {}
 
 GameInputBackend::~GameInputBackend()
@@ -134,17 +151,21 @@ GameInputBackend::~GameInputBackend()
 
 void GameInputBackend::Init(HWND)
 {
-	std::lock_guard lock(impl_->mutex);
-	if (impl_->input)
-		return;
-	if (FAILED(GameInputCreate(&impl_->input)))
-		return;
-	if (FAILED(impl_->input->CreateDispatcher(&impl_->dispatcher)))
 	{
-		impl_->input->Release();
-		impl_->input = nullptr;
-		return;
+		std::lock_guard lock(impl_->mutex);
+		if (impl_->input)
+			return;
+		if (FAILED(GameInputCreate(&impl_->input)))
+			return;
+		if (FAILED(impl_->input->CreateDispatcher(&impl_->dispatcher)))
+		{
+			impl_->input->Release();
+			impl_->input = nullptr;
+			return;
+		}
 	}
+	// RegisterDeviceCallback may synchronously invoke DeviceCallback (e.g. with
+	// GameInputBlockingEnumeration); do not hold impl_->mutex across this call.
 	impl_->input->RegisterDeviceCallback(
 		nullptr,
 		GameInputKindController,

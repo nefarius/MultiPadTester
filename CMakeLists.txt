@@ -53,4 +53,8 @@ if(USE_GAMEINPUT AND GAMEINPUT_ROOT)
 	target_link_directories(MultiPadTester PRIVATE ${GAMEINPUT_ROOT}/lib)
 	target_link_libraries(MultiPadTester PRIVATE GameInput.lib)
 	target_compile_definitions(MultiPadTester PRIVATE USE_GAMEINPUT)
+	# Delay-load GameInput.dll so the app starts even when the redist is not installed
+	if(MSVC)
+		target_link_options(MultiPadTester PRIVATE /DELAYLOAD:GameInput.dll)
+	endif()
 endif()

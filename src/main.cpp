@@ -383,7 +383,8 @@ int APIENTRY wWinMain(
 	backends.push_back(std::make_unique<HidApiBackend>());
 	backends.push_back(std::make_unique<WgiBackend>());
 #ifdef USE_GAMEINPUT
-	backends.push_back(std::make_unique<GameInputBackend>());
+	if (GameInputBackend::IsAvailable())
+		backends.push_back(std::make_unique<GameInputBackend>());
 #endif
 	g_backends = &backends;
 

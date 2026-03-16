@@ -14,6 +14,9 @@ public:
 	static constexpr const char* Name = "GameInput";
 	static constexpr int kMaxDevices = 16;
 
+	/** Returns true if the GameInput redistributable is available (DLL present and working). */
+	static bool IsAvailable();
+
 	GameInputBackend();
 	~GameInputBackend() override;
 
