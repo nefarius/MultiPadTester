@@ -7,6 +7,7 @@
 #include <array>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -65,7 +66,7 @@ struct GameInputBackend::Impl
 		GameInputDeviceStatus)
 	{
 		auto* self = static_cast<Impl*>(context);
-		std::lock_guard lock(self->mutex);
+		std::scoped_lock lock(self->mutex);
 		auto it = std::ranges::find_if(self->devices,
 			[device](const SlotDevice& d) { return d.device == device; });
 		if (currentStatus & GameInputDeviceConnected)
@@ -167,8 +168,8 @@ struct GameInputBackend::Impl
 	static int AllocateSlot(const Impl* self)
 	{
 		for (int i = 0; i < GameInputBackend::kMaxDevices; ++i)
-			if (std::none_of(self->devices.begin(), self->devices.end(),
-				[i](const SlotDevice& d) { return d.slot == i; }))
+			if (std::ranges::none_of(self->devices,
+			                         [i](const SlotDevice& d) { return d.slot == i; }))
 				return i;
 		return -1;
 	}
@@ -197,7 +198,7 @@ GameInputBackend::~GameInputBackend()
 {
 	if (impl_)
 	{
-		std::lock_guard lock(impl_->mutex);
+		std::scoped_lock lock(impl_->mutex);
 		if (impl_->input && impl_->callbackToken)
 			impl_->input->UnregisterCallback(impl_->callbackToken, 0);
 		for (auto& d : impl_->devices)
@@ -220,7 +221,7 @@ GameInputBackend::~GameInputBackend()
 void GameInputBackend::Init(HWND)
 {
 	{
-		std::lock_guard lock(impl_->mutex);
+		std::scoped_lock lock(impl_->mutex);
 		if (impl_->input)
 			return;
 		if (FAILED(GameInputCreate(&impl_->input)))
@@ -251,7 +252,7 @@ void GameInputBackend::Poll()
 	// Do not hold mutex across Dispatch(0) — device callback takes the same mutex.
 	impl_->dispatcher->Dispatch(0);
 
-	std::lock_guard lock(impl_->mutex);
+	std::scoped_lock lock(impl_->mutex);
 	for (auto& slotDev : impl_->devices)
 	{
 		int slot = slotDev.slot;
@@ -259,18 +260,18 @@ void GameInputBackend::Poll()
 		HRESULT hr = impl_->input->GetCurrentReading(GameInputKindGamepad, slotDev.device, &reading);
 		if (SUCCEEDED(hr) && reading)
 		{
-			GameInputGamepadState gistate{};
-			if (SUCCEEDED(reading->GetGamepadState(&gistate)))
+			GameInputGamepadState giState{};
+			if (SUCCEEDED(reading->GetGamepadState(&giState)))
 			{
 				auto& gs = impl_->states[static_cast<size_t>(slot)];
 				gs.connected = true;
-				gs.leftStickX = gistate.leftThumbstickX;
-				gs.leftStickY = gistate.leftThumbstickY;
-				gs.rightStickX = gistate.rightThumbstickX;
-				gs.rightStickY = gistate.rightThumbstickY;
-				gs.leftTrigger = gistate.leftTrigger;
-				gs.rightTrigger = gistate.rightTrigger;
-				gs.buttons = MapGamepadButtons(gistate.buttons);
+				gs.leftStickX = giState.leftThumbstickX;
+				gs.leftStickY = giState.leftThumbstickY;
+				gs.rightStickX = giState.rightThumbstickX;
+				gs.rightStickY = giState.rightThumbstickY;
+				gs.leftTrigger = giState.leftTrigger;
+				gs.rightTrigger = giState.rightTrigger;
+				gs.buttons = MapGamepadButtons(giState.buttons);
 			}
 			reading->Release();
 			continue;
@@ -293,7 +294,7 @@ void GameInputBackend::Poll()
 			const uint32_t axisCount = reading->GetControllerAxisCount();
 			auto axisVal = [&](int sem) -> float {
 				int idx = slotDev.axisIndex[sem];
-				if (idx < 0 || static_cast<uint32_t>(idx) >= axisCount)
+				if (idx < 0 || std::cmp_greater_equal(idx, axisCount))
 					return (sem >= 4) ? 0.f : 0.f; // triggers 0, sticks 0 (center)
 				float raw = axes[idx];
 				float rest = slotDev.axisRest[sem];
@@ -355,7 +356,7 @@ const GamepadState& GameInputBackend::GetState(int slot) const
 {
 	if (slot < 0 || slot >= kMaxDevices)
 	{
-		static const GamepadState empty{};
+		static constexpr GamepadState empty{};
 		return empty;
 	}
 	return impl_->states[static_cast<size_t>(slot)];
