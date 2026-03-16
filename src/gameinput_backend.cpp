@@ -48,6 +48,9 @@ struct GameInputBackend::Impl
 		std::string displayName;
 		uint16_t vendorId = 0;
 		uint16_t productId = 0;
+		// Axis mapping: indices into GetControllerAxisState() array for [leftX, leftY, rightX, rightY, leftTrigger, rightTrigger]
+		std::array<int, 6> axisIndex = { -1, -1, -1, -1, -1, -1 };
+		std::array<float, 6> axisRest = { 0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f };
 	};
 	std::vector<SlotDevice> devices;
 	std::array<GamepadState, GameInputBackend::kMaxDevices> states{};
@@ -93,7 +96,59 @@ struct GameInputBackend::Impl
 						displayNameStr = friendly;
 				}
 			}
-			self->devices.push_back({ device, slot, std::move(displayNameStr), vid, pid });
+			const bool sony = IsSonyGamepad(vid, pid);
+			std::array<int, 6> axisIndex = { -1, -1, -1, -1, -1, -1 };
+			std::array<float, 6> axisRest = { 0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f };
+			if (const GameInputDeviceInfo* info = device->GetDeviceInfo(); info && info->controllerAxisInfo)
+			{
+				// Map controller axes by label (triggers) and legacy DInput index (sticks). DInput order: 0=lX, 1=lY, 2=lZ, 3=lRx, 4=lRy, 5=lRz.
+				// Non-Sony: 0,1=left stick; 3,4=right stick; 2,5=triggers. Sony: 0,1=left stick; 2,5=right stick; 3,4=triggers.
+				for (uint32_t i = 0; i < info->controllerAxisCount; ++i)
+				{
+					const auto& ax = info->controllerAxisInfo[i];
+					float rest = ax.hasRestValue ? ax.restValue : 0.5f;
+					int sem = -1;
+					if (ax.label == GameInputLabelXboxLeftTrigger)
+						sem = 4;
+					else if (ax.label == GameInputLabelXboxRightTrigger)
+						sem = 5;
+					else
+					{
+						switch (ax.legacyDInputIndex)
+						{
+						case 0: sem = 0; break; // leftStickX
+						case 1: sem = 1; break; // leftStickY
+						case 2: sem = sony ? 2 : 4; break; // Sony: rightStickX; else leftTrigger
+						case 3: sem = sony ? 4 : 2; break; // Sony: leftTrigger; else rightStickX
+						case 4: sem = sony ? 5 : 3; break; // Sony: rightTrigger; else rightStickY
+						case 5: sem = sony ? 3 : 5; break; // Sony: rightStickY; else rightTrigger
+						default: break;
+						}
+					}
+					if (sem >= 0 && sem < 6)
+					{
+						axisIndex[sem] = static_cast<int>(i);
+						axisRest[sem] = rest;
+					}
+				}
+			}
+			// Fallback when device has no controllerAxisInfo: assume DInput order 0=lX,1=lY,2=lZ,3=lRx,4=lRy,5=lRz
+			if (axisIndex[0] < 0)
+			{
+				axisRest[0] = axisRest[1] = axisRest[2] = axisRest[3] = 0.5f;
+				axisRest[4] = axisRest[5] = 0.f;
+				if (sony)
+				{
+					// Sony: left 0,1; right stick 2,5 (lZ,lRz); triggers 3,4 (lRx,lRy)
+					axisIndex = { 0, 1, 2, 5, 3, 4 };
+				}
+				else
+				{
+					// Non-Sony: left 0,1; right stick 3,4 (lRx,lRy); triggers 2,5 (lZ,lRz)
+					axisIndex = { 0, 1, 3, 4, 2, 5 };
+				}
+			}
+			self->devices.push_back({ device, slot, std::move(displayNameStr), vid, pid, axisIndex, axisRest });
 			self->slotDisplayNames[static_cast<size_t>(slot)] = self->devices.back().displayName;
 		}
 		else
@@ -235,26 +290,25 @@ void GameInputBackend::Poll()
 			reading->GetControllerSwitchState(kMaxSwitches, switches);
 			auto& gs = impl_->states[static_cast<size_t>(slot)];
 			gs.connected = true;
+			const uint32_t axisCount = reading->GetControllerAxisCount();
+			auto axisVal = [&](int sem) -> float {
+				int idx = slotDev.axisIndex[sem];
+				if (idx < 0 || static_cast<uint32_t>(idx) >= axisCount)
+					return (sem >= 4) ? 0.f : 0.f; // triggers 0, sticks 0 (center)
+				float raw = axes[idx];
+				float rest = slotDev.axisRest[sem];
+				if (sem >= 4) // triggers: 0..1
+					return std::clamp(raw, 0.f, 1.f);
+				// sticks: normalize from rest (e.g. 0.5) to -1..1
+				return std::clamp((raw - rest) * 2.f, -1.f, 1.f);
+			};
+			gs.leftStickX = axisVal(0);
+			gs.leftStickY = axisVal(1);
+			gs.rightStickX = axisVal(2);
+			gs.rightStickY = axisVal(3);
+			gs.leftTrigger = axisVal(4);
+			gs.rightTrigger = axisVal(5);
 			const bool sony = IsSonyGamepad(slotDev.vendorId, slotDev.productId);
-			if (sony)
-			{
-				// Sony HID axis order: 0,1 = left stick; 2,3 = triggers; 4,5 = right stick
-				gs.leftStickX = (kMaxAxes > 0) ? axes[0] : 0.0f;
-				gs.leftStickY = (kMaxAxes > 1) ? axes[1] : 0.0f;
-				gs.leftTrigger = (kMaxAxes > 2) ? (axes[2] * 0.5f + 0.5f) : 0.0f;
-				gs.rightTrigger = (kMaxAxes > 3) ? (axes[3] * 0.5f + 0.5f) : 0.0f;
-				gs.rightStickX = (kMaxAxes > 4) ? axes[4] : 0.0f;
-				gs.rightStickY = (kMaxAxes > 5) ? axes[5] : 0.0f;
-			}
-			else
-			{
-				gs.leftStickX = (kMaxAxes > 0) ? axes[0] : 0.0f;
-				gs.leftStickY = (kMaxAxes > 1) ? axes[1] : 0.0f;
-				gs.rightStickX = (kMaxAxes > 2) ? axes[2] : 0.0f;
-				gs.rightStickY = (kMaxAxes > 3) ? axes[3] : 0.0f;
-				gs.leftTrigger = (kMaxAxes > 4) ? (axes[4] * 0.5f + 0.5f) : 0.0f;
-				gs.rightTrigger = (kMaxAxes > 5) ? (axes[5] * 0.5f + 0.5f) : 0.0f;
-			}
 			uint16_t b = 0;
 			using enum Button;
 			if (sony)
