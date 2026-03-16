@@ -69,7 +69,6 @@ struct WgiBackend::Impl
 			if (slotGamepads[i] && slotGamepads[i] == pad)
 			{
 				slotGamepads[i].reset();
-				states[i] = GamepadState{};
 				break;
 			}
 		}
@@ -149,6 +148,9 @@ int WgiBackend::GetMaxSlots() const { return kMaxSlots; }
 
 const GamepadState& WgiBackend::GetState(int slot) const
 {
+	static GamepadState const empty{};
+	if (slot < 0 || slot >= kMaxSlots)
+		return empty;
 	return impl_->states[slot];
 }
 
