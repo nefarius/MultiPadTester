@@ -1,6 +1,7 @@
 build/
 out/
 vcpkg_installed/
+.gameinput-sdk/
 CMakeUserPresets.json
 
 # IDE
