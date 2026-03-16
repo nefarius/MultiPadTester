@@ -1,7 +1,9 @@
 #include "texture_loader.h"
 #include <objbase.h>
+#include <optional>
 #include <wincodec.h>
 #include <vector>
+#include <wil/resource.h>
 
 #pragma comment(lib, "windowscodecs.lib")
 
@@ -98,6 +100,9 @@ wil::com_ptr<ID3D11ShaderResourceView> LoadTextureFromPngMemory(ID3D11Device* de
             OutputDebugStringA("LoadTextureFromPngMemory: COM already initialized with a different threading model (RPC_E_CHANGED_MODE).\n");
         return srv;
     }
+    std::optional<wil::unique_couninitialize_call> coCleanup;
+    if (coHr == S_OK)
+        coCleanup.emplace();
 
     std::vector<uint8_t> rgba;
     int width = 0, height = 0;
