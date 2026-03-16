@@ -39,7 +39,7 @@ namespace
 
 struct WgiBackend::Impl
 {
-	std::mutex mutex;
+	mutable std::mutex mutex;
 	std::array<std::optional<Gamepad>, kMaxSlots> slotGamepads{};
 	GamepadState states[kMaxSlots]{};
 	std::array<std::string, kMaxSlots> slotDisplayNames;
@@ -88,7 +88,7 @@ WgiBackend::~WgiBackend()
 
 void WgiBackend::Init(HWND)
 {
-	static bool winrtInitialized = false;
+	thread_local static bool winrtInitialized = false;
 	if (!winrtInitialized)
 	{
 		winrt::init_apartment();
@@ -159,6 +159,9 @@ const char* WgiBackend::GetName() const { return Name; }
 const char* WgiBackend::GetSlotDisplayName(int slot) const
 {
 	if (slot < 0 || slot >= kMaxSlots) return nullptr;
-	if (impl_->slotGamepads[slot]) return impl_->slotDisplayNames[slot].c_str();
-	return nullptr;
+	std::lock_guard lock(impl_->mutex);
+	if (!impl_->slotGamepads[slot]) return nullptr;
+	thread_local static std::string result;
+	result = impl_->slotDisplayNames[slot];
+	return result.c_str();
 }
