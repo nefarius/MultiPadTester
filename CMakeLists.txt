@@ -32,6 +32,7 @@ target_link_libraries(MultiPadTester PRIVATE
     dinput8.lib
     dxguid.lib
     setupapi.lib
+    runtimeobject.lib
 )
 
 target_compile_definitions(MultiPadTester PRIVATE

@@ -22,6 +22,7 @@
 #include "rawinput_backend.h"
 #include "dinput_backend.h"
 #include "hidapi_backend.h"
+#include "wgi_backend.h"
 #include "gamepad_renderer.h"
 #include "texture_loader.h"
 #include "resource.h"
@@ -377,6 +378,7 @@ int APIENTRY wWinMain(
 	backends.push_back(std::make_unique<RawInputBackend>());
 	backends.push_back(std::make_unique<DInputBackend>());
 	backends.push_back(std::make_unique<HidApiBackend>());
+	backends.push_back(std::make_unique<WgiBackend>());
 	g_backends = &backends;
 
 	for (auto& b : backends)
@@ -441,6 +443,7 @@ int APIENTRY wWinMain(
 						: (name == RawInputBackend::Name) ? "Low-level with medium complexity; many XP-era games use this."
 						: (name == DInputBackend::Name)  ? "Legacy API; the oldest available approach; many legacy titles use this."
 						: (name == HidApiBackend::Name)  ? "Very verbose but most universal; many modern engines use this."
+						: (name == WgiBackend::Name)     ? "Windows Runtime gamepad API; Xbox and compatible devices."
 						: "";
 					ImGui::TextWrapped("%s", description);
 					ImGui::Spacing();
