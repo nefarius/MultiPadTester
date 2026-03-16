@@ -20,24 +20,16 @@ HidApiBackend::~HidApiBackend()
 
 void HidApiBackend::CloseDevice(DeviceInfo& dev)
 {
-	if (dev.handle != INVALID_HANDLE_VALUE)
+	if (dev.handle.is_valid())
 	{
 		if (dev.readPending)
-			CancelIo(dev.handle);
-		CloseHandle(dev.handle);
-		dev.handle = INVALID_HANDLE_VALUE;
+			CancelIo(dev.handle.get());
+		dev.handle.reset();
 	}
-	if (dev.overlapped.hEvent)
-	{
-		CloseHandle(dev.overlapped.hEvent);
-		dev.overlapped.hEvent = nullptr;
-	}
+	dev.readEvent.reset();
+	dev.overlapped.hEvent = nullptr;
 	dev.readPending = false;
-	if (dev.preparsed)
-	{
-		HidD_FreePreparsedData(dev.preparsed);
-		dev.preparsed = nullptr;
-	}
+	dev.preparsed.reset();
 	dev.readBuf.clear();
 	if (dev.slot >= 0 && dev.slot < kMaxDevices)
 		states_[dev.slot] = GamepadState{};
@@ -62,7 +54,7 @@ void HidApiBackend::Poll()
 	for (auto it = devices_.begin(); it != devices_.end();)
 	{
 		auto& dev = **it;
-		if (dev.handle == INVALID_HANDLE_VALUE)
+		if (!dev.handle.is_valid())
 		{
 			++it;
 			continue;
@@ -76,7 +68,7 @@ void HidApiBackend::Poll()
 		}
 
 		DWORD bytesRead = 0;
-		BOOL ok = GetOverlappedResult(dev.handle, &dev.overlapped,
+		BOOL ok = GetOverlappedResult(dev.handle.get(), &dev.overlapped,
 		                              &bytesRead, FALSE);
 		if (ok)
 		{
@@ -228,40 +220,35 @@ bool HidApiBackend::OpenAndSetup(const wchar_t* path, DeviceInfo& info)
 	if (h == INVALID_HANDLE_VALUE)
 		return false;
 
-	info.handle = h;
+	info.handle.reset(h);
 
 	HIDD_ATTRIBUTES attrs{};
 	attrs.Size = sizeof(attrs);
-	if (HidD_GetAttributes(h, &attrs))
+	if (HidD_GetAttributes(info.handle.get(), &attrs))
 	{
 		info.vendorId = attrs.VendorID;
 		info.productId = attrs.ProductID;
 	}
 
 	PHIDP_PREPARSED_DATA pp = nullptr;
-	if (!HidD_GetPreparsedData(h, &pp))
+	if (!HidD_GetPreparsedData(info.handle.get(), &pp))
 	{
-		CloseHandle(h);
-		info.handle = INVALID_HANDLE_VALUE;
+		info.handle.reset();
 		return false;
 	}
-	info.preparsed = pp;
+	info.preparsed.reset(pp);
 
 	if (HidP_GetCaps(pp, &info.caps) != HIDP_STATUS_SUCCESS)
 	{
-		HidD_FreePreparsedData(pp);
-		info.preparsed = nullptr;
-		CloseHandle(h);
-		info.handle = INVALID_HANDLE_VALUE;
+		info.preparsed.reset();
+		info.handle.reset();
 		return false;
 	}
 
 	if (!IsGamepadOrJoystick(info.caps))
 	{
-		HidD_FreePreparsedData(pp);
-		info.preparsed = nullptr;
-		CloseHandle(h);
-		info.handle = INVALID_HANDLE_VALUE;
+		info.preparsed.reset();
+		info.handle.reset();
 		return false;
 	}
 
@@ -279,10 +266,8 @@ bool HidApiBackend::OpenAndSetup(const wchar_t* path, DeviceInfo& info)
 	int s = AllocateSlot();
 	if (s < 0)
 	{
-		HidD_FreePreparsedData(pp);
-		info.preparsed = nullptr;
-		CloseHandle(h);
-		info.handle = INVALID_HANDLE_VALUE;
+		info.preparsed.reset();
+		info.handle.reset();
 		return false;
 	}
 
@@ -293,7 +278,8 @@ bool HidApiBackend::OpenAndSetup(const wchar_t* path, DeviceInfo& info)
 	info.readBuf.resize(info.caps.InputReportByteLength);
 
 	info.overlapped = {};
-	info.overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+	info.readEvent.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+	info.overlapped.hEvent = info.readEvent.get();
 
 	StartRead(info);
 	return true;
@@ -303,14 +289,14 @@ bool HidApiBackend::OpenAndSetup(const wchar_t* path, DeviceInfo& info)
 
 void HidApiBackend::StartRead(DeviceInfo& dev)
 {
-	if (dev.handle == INVALID_HANDLE_VALUE) return;
+	if (!dev.handle.is_valid()) return;
 
 	constexpr int kMaxSyncReads = 16;
 	for (int attempt = 0; attempt < kMaxSyncReads; ++attempt)
 	{
 		ResetEvent(dev.overlapped.hEvent);
 		DWORD bytesRead = 0;
-		BOOL ok = ReadFile(dev.handle, dev.readBuf.data(),
+		BOOL ok = ReadFile(dev.handle.get(), dev.readBuf.data(),
 		                   static_cast<DWORD>(dev.readBuf.size()),
 		                   &bytesRead, &dev.overlapped);
 		if (ok)
@@ -353,7 +339,7 @@ void HidApiBackend::ParseReport(DeviceInfo& dev, DWORD bytesRead)
 	if (bytesRead == 0) return;
 	if (dev.slot < 0 || dev.slot >= kMaxDevices) return;
 
-	PHIDP_PREPARSED_DATA pp = dev.preparsed;
+	PHIDP_PREPARSED_DATA pp = dev.preparsed.get();
 	if (!pp) return;
 
 	auto& gs = states_[dev.slot];

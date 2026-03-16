@@ -10,11 +10,7 @@
 DInputBackend::~DInputBackend()
 {
 	ReleaseDevices();
-	if (di_)
-	{
-		di_->Release();
-		di_ = nullptr;
-	}
+	di_.reset();
 }
 
 void DInputBackend::Init(const HWND hwnd)
@@ -25,7 +21,7 @@ void DInputBackend::Init(const HWND hwnd)
 		GetWindowLongPtr(hwnd, GWLP_HINSTANCE));
 
 	if (FAILED(DirectInput8Create(hInst, DIRECTINPUT_VERSION,
-		IID_IDirectInput8W, reinterpret_cast<void**>(&di_), nullptr)))
+		IID_IDirectInput8W, reinterpret_cast<void**>(di_.put()), nullptr)))
 		return;
 
 	EnumerateDevices();
@@ -38,7 +34,7 @@ void DInputBackend::ReleaseDevices()
 		if (d.device)
 		{
 			d.device->Unacquire();
-			d.device->Release();
+			d.device.reset();
 		}
 		if (d.slot >= 0 && d.slot < kMaxDevices)
 			states_[d.slot] = GamepadState{};
@@ -197,7 +193,7 @@ void DInputBackend::EnumerateDevices()
 		if (d.device)
 		{
 			d.device->Unacquire();
-			d.device->Release();
+			d.device.reset();
 		}
 		return true;
 	});
@@ -211,21 +207,19 @@ bool DInputBackend::SetupDevice(
 	info.productId = static_cast<uint16_t>(HIWORD(inst.guidProduct.Data1));
 	info.productName = inst.tszProductName;
 
-	if (FAILED(di_->CreateDevice(inst.guidInstance, &info.device, nullptr)))
+	if (FAILED(di_->CreateDevice(inst.guidInstance, info.device.put(), nullptr)))
 		return false;
 
 	if (FAILED(info.device->SetDataFormat(&c_dfDIJoystick2)))
 	{
-		info.device->Release();
-		info.device = nullptr;
+		info.device.reset();
 		return false;
 	}
 
 	if (FAILED(info.device->SetCooperativeLevel(
 		hwnd_, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE)))
 	{
-		info.device->Release();
-		info.device = nullptr;
+		info.device.reset();
 		return false;
 	}
 
@@ -241,8 +235,7 @@ bool DInputBackend::SetupDevice(
 	int s = AllocateSlot();
 	if (s < 0)
 	{
-		info.device->Release();
-		info.device = nullptr;
+		info.device.reset();
 		return false;
 	}
 	info.slot = s;

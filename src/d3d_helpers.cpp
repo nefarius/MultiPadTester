@@ -44,7 +44,7 @@ bool D3DContext::Create(const HWND hwnd, const int refreshRatePreferred)
 	if (D3D11CreateDeviceAndSwapChain(
 		nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
 		levels.data(), levels.size(), D3D11_SDK_VERSION,
-		&sd, &swapChain, &device, &obtained, &deviceCtx) != S_OK)
+		&sd, swapChain.put(), device.put(), &obtained, deviceCtx.put()) != S_OK)
 		return false;
 
 	CreateRTV();
@@ -53,39 +53,22 @@ bool D3DContext::Create(const HWND hwnd, const int refreshRatePreferred)
 
 void D3DContext::CreateRTV()
 {
-	ID3D11Texture2D* back = nullptr;
-	swapChain->GetBuffer(0, IID_PPV_ARGS(&back));
-	device->CreateRenderTargetView(back, nullptr, &rtv);
-	back->Release();
+	wil::com_ptr<ID3D11Texture2D> back;
+	swapChain->GetBuffer(0, IID_PPV_ARGS(back.put()));
+	device->CreateRenderTargetView(back.get(), nullptr, rtv.put());
 }
 
 void D3DContext::CleanupRTV()
 {
-	if (rtv)
-	{
-		rtv->Release();
-		rtv = nullptr;
-	}
+	rtv.reset();
 }
 
 void D3DContext::Cleanup()
 {
 	CleanupRTV();
-	if (swapChain)
-	{
-		swapChain->Release();
-		swapChain = nullptr;
-	}
-	if (deviceCtx)
-	{
-		deviceCtx->Release();
-		deviceCtx = nullptr;
-	}
-	if (device)
-	{
-		device->Release();
-		device = nullptr;
-	}
+	swapChain.reset();
+	deviceCtx.reset();
+	device.reset();
 }
 
 void D3DContext::Resize(LPARAM lParam)

@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(imgui CONFIG REQUIRED)
+find_package(WIL CONFIG REQUIRED)
 
 file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 file(GLOB_RECURSE HEADER_FILES src/*.h)
@@ -22,6 +23,7 @@ target_include_directories(MultiPadTester PRIVATE src res)
 
 target_link_libraries(MultiPadTester PRIVATE
     imgui::imgui
+    WIL::WIL
     d3d11.lib
     d3dcompiler.lib
     dxgi.lib

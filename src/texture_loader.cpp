@@ -2,6 +2,7 @@
 #include <objbase.h>
 #include <wincodec.h>
 #include <vector>
+#include <wil/resource.h>
 
 #pragma comment(lib, "windowscodecs.lib")
 
@@ -23,75 +24,47 @@ namespace {
 bool DecodePngToRgba(const void* pngData, size_t pngSize,
                      std::vector<uint8_t>& outRgba, int& outWidth, int& outHeight)
 {
-    IWICImagingFactory* factory = nullptr;
+    wil::com_ptr<IWICImagingFactory> factory;
     HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                                  IID_PPV_ARGS(&factory));
+                                  IID_PPV_ARGS(factory.put()));
     if (FAILED(hr) || !factory)
         return false;
 
-    IWICStream* stream = nullptr;
-    hr = factory->CreateStream(&stream);
+    wil::com_ptr<IWICStream> stream;
+    hr = factory->CreateStream(stream.put());
     if (FAILED(hr) || !stream)
-    {
-        factory->Release();
         return false;
-    }
 
     hr = stream->InitializeFromMemory(static_cast<BYTE*>(const_cast<void*>(pngData)),
                                       static_cast<DWORD>(pngSize));
     if (FAILED(hr))
-    {
-        stream->Release();
-        factory->Release();
         return false;
-    }
 
-    IWICBitmapDecoder* decoder = nullptr;
-    hr = factory->CreateDecoderFromStream(stream, nullptr, WICDecodeMetadataCacheOnLoad, &decoder);
-    stream->Release();
+    wil::com_ptr<IWICBitmapDecoder> decoder;
+    hr = factory->CreateDecoderFromStream(stream.get(), nullptr, WICDecodeMetadataCacheOnLoad, decoder.put());
     if (FAILED(hr) || !decoder)
-    {
-        factory->Release();
         return false;
-    }
 
-    IWICBitmapFrameDecode* frame = nullptr;
-    hr = decoder->GetFrame(0, &frame);
-    decoder->Release();
+    wil::com_ptr<IWICBitmapFrameDecode> frame;
+    hr = decoder->GetFrame(0, frame.put());
     if (FAILED(hr) || !frame)
-    {
-        factory->Release();
         return false;
-    }
 
     UINT width = 0, height = 0;
     hr = frame->GetSize(&width, &height);
     if (FAILED(hr) || width == 0 || height == 0)
-    {
-        frame->Release();
-        factory->Release();
         return false;
-    }
 
-    IWICFormatConverter* converter = nullptr;
-    hr = factory->CreateFormatConverter(&converter);
+    wil::com_ptr<IWICFormatConverter> converter;
+    hr = factory->CreateFormatConverter(converter.put());
     if (FAILED(hr) || !converter)
-    {
-        frame->Release();
-        factory->Release();
         return false;
-    }
 
-    hr = converter->Initialize(frame, GUID_WICPixelFormat32bppRGBA,
+    hr = converter->Initialize(frame.get(), GUID_WICPixelFormat32bppRGBA,
                                WICBitmapDitherTypeNone, nullptr, 0.f,
                                WICBitmapPaletteTypeCustom);
-    frame->Release();
     if (FAILED(hr))
-    {
-        converter->Release();
-        factory->Release();
         return false;
-    }
 
     const size_t stride = static_cast<size_t>(width) * 4u;
     const size_t totalBytes = stride * static_cast<size_t>(height);
@@ -99,9 +72,6 @@ bool DecodePngToRgba(const void* pngData, size_t pngSize,
 
     hr = converter->CopyPixels(nullptr, static_cast<UINT>(stride),
                                 static_cast<UINT>(totalBytes), outRgba.data());
-    converter->Release();
-    factory->Release();
-
     if (FAILED(hr))
         return false;
 
@@ -110,43 +80,31 @@ bool DecodePngToRgba(const void* pngData, size_t pngSize,
     return true;
 }
 
-} /**
- * @brief Create a D3D11 shader resource view from PNG image data stored in memory.
- *
- * Decodes the provided PNG bytes to 32-bit RGBA, creates an immutable DXGI_FORMAT_R8G8B8A8_UNORM
- * 2D texture initialized with the decoded pixels, and returns a shader resource view for that texture.
- *
- * @param device Pointer to the D3D11 device used to create the texture and SRV.
- * @param pngData Pointer to the PNG data in memory.
- * @param pngSize Size of the PNG data in bytes.
- * @param outWidth If non-null, receives the decoded image width in pixels.
- * @param outHeight If non-null, receives the decoded image height in pixels.
- * @return ID3D11ShaderResourceView* The created shader resource view on success, or `nullptr` on failure.
- *
- * Ownership: caller receives a reference to the SRV and is responsible for releasing it when no longer needed.
- */
+}
 
-ID3D11ShaderResourceView* LoadTextureFromPngMemory(ID3D11Device* device,
-                                                    const void* pngData,
-                                                    size_t pngSize,
-                                                    int* outWidth,
-                                                    int* outHeight)
+wil::com_ptr<ID3D11ShaderResourceView> LoadTextureFromPngMemory(ID3D11Device* device,
+                                                               const void* pngData,
+                                                               size_t pngSize,
+                                                               int* outWidth,
+                                                               int* outHeight)
 {
+    wil::com_ptr<ID3D11ShaderResourceView> srv;
     if (!device || !pngData || pngSize == 0)
-        return nullptr;
+        return srv;
 
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (coHr != S_OK && coHr != S_FALSE)
     {
         if (coHr == RPC_E_CHANGED_MODE)
             OutputDebugStringA("LoadTextureFromPngMemory: COM already initialized with a different threading model (RPC_E_CHANGED_MODE).\n");
-        return nullptr;
+        return srv;
     }
+    wil::unique_couninitialize_call coCleanup;
 
     std::vector<uint8_t> rgba;
     int width = 0, height = 0;
     if (!DecodePngToRgba(pngData, pngSize, rgba, width, height))
-        return nullptr;
+        return srv;
 
     if (outWidth)
         *outWidth = width;
@@ -171,10 +129,10 @@ ID3D11ShaderResourceView* LoadTextureFromPngMemory(ID3D11Device* device,
     initData.SysMemPitch = static_cast<UINT>(width * 4);
     initData.SysMemSlicePitch = 0;
 
-    ID3D11Texture2D* texture = nullptr;
-    HRESULT hr = device->CreateTexture2D(&desc, &initData, &texture);
+    wil::com_ptr<ID3D11Texture2D> texture;
+    HRESULT hr = device->CreateTexture2D(&desc, &initData, texture.put());
     if (FAILED(hr) || !texture)
-        return nullptr;
+        return srv;
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
     srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -182,30 +140,9 @@ ID3D11ShaderResourceView* LoadTextureFromPngMemory(ID3D11Device* device,
     srvDesc.Texture2D.MipLevels = 1;
     srvDesc.Texture2D.MostDetailedMip = 0;
 
-    ID3D11ShaderResourceView* srv = nullptr;
-    hr = device->CreateShaderResourceView(texture, &srvDesc, &srv);
-    texture->Release();
+    hr = device->CreateShaderResourceView(texture.get(), &srvDesc, srv.put());
     if (FAILED(hr) || !srv)
-        return nullptr;
+        return wil::com_ptr<ID3D11ShaderResourceView>();
 
     return srv;
-}
-
-/**
- * @brief Releases a shader resource view and its underlying D3D11 resource.
- *
- * If `srv` is non-null, this function retrieves the resource referenced by the shader resource view,
- * releases the view, and then releases the underlying resource. If `srv` is null, the function does nothing.
- *
- * @param srv Pointer to the ID3D11ShaderResourceView to release; may be null.
- */
-void ReleaseControllerTexture(ID3D11ShaderResourceView* srv)
-{
-    if (!srv)
-        return;
-    ID3D11Resource* resource = nullptr;
-    srv->GetResource(&resource);
-    srv->Release();
-    if (resource)
-        resource->Release();
 }

@@ -1,13 +1,14 @@
 #pragma once
 #include <d3d11.h>
 #include <dxgi.h>
+#include <wil/com.h>
 
 struct D3DContext
 {
-	ID3D11Device* device = nullptr;
-	ID3D11DeviceContext* deviceCtx = nullptr;
-	IDXGISwapChain* swapChain = nullptr;
-	ID3D11RenderTargetView* rtv = nullptr;
+	wil::com_ptr<ID3D11Device> device;
+	wil::com_ptr<ID3D11DeviceContext> deviceCtx;
+	wil::com_ptr<IDXGISwapChain> swapChain;
+	wil::com_ptr<ID3D11RenderTargetView> rtv;
 
 	[[nodiscard]] bool Create(HWND hwnd, int refreshRatePreferred = 60);
 	void CreateRTV();
