@@ -1,6 +1,7 @@
 #include "gameinput_backend.h"
 #include <GameInput.h>
 
+#include <algorithm>
 #include <array>
 #include <mutex>
 #include <string>
@@ -68,14 +69,13 @@ struct GameInputBackend::Impl
 			if (slot < 0)
 				return;
 			device->AddRef();
-			GameInputDeviceInfo info{};
 			std::string displayNameStr = "Controller " + std::to_string(slot);
-			if (SUCCEEDED(device->GetDeviceInfo(&info)))
+			if (const GameInputDeviceInfo* info = device->GetDeviceInfo())
 			{
 				// displayName is GameInputString const* (UTF-8); often null per documentation
-				if (info.displayName && info.displayName->data && info.displayName->sizeInBytes > 0)
+				if (info->displayName && info->displayName->data && info->displayName->sizeInBytes > 0)
 				{
-					displayNameStr.assign(info.displayName->data, info.displayName->sizeInBytes);
+					displayNameStr.assign(info->displayName->data, info->displayName->sizeInBytes);
 					while (!displayNameStr.empty() && displayNameStr.back() == '\0')
 						displayNameStr.pop_back();
 				}
@@ -99,7 +99,8 @@ struct GameInputBackend::Impl
 	static int AllocateSlot(const Impl* self)
 	{
 		for (int i = 0; i < GameInputBackend::kMaxDevices; ++i)
-			if (std::ranges::none_of(self->devices, [i](const SlotDevice& d) { return d.slot == i; }))
+			if (std::none_of(self->devices.begin(), self->devices.end(),
+				[i](const SlotDevice& d) { return d.slot == i; }))
 				return i;
 		return -1;
 	}
@@ -113,7 +114,7 @@ GameInputBackend::~GameInputBackend()
 	{
 		std::lock_guard lock(impl_->mutex);
 		if (impl_->input && impl_->callbackToken)
-			impl_->input->UnregisterCallback(impl_->callbackToken);
+			impl_->input->UnregisterCallback(impl_->callbackToken, 0);
 		for (auto& d : impl_->devices)
 			if (d.device)
 				d.device->Release();
@@ -215,10 +216,10 @@ void GameInputBackend::Poll()
 			if (kMaxSwitches > 0)
 			{
 				GameInputSwitchPosition hat = switches[0];
-				if (hat == GameInputSwitchDPadUp) b |= std::to_underlying(DPadUp);
-				else if (hat == GameInputSwitchDPadDown) b |= std::to_underlying(DPadDown);
-				else if (hat == GameInputSwitchDPadLeft) b |= std::to_underlying(DPadLeft);
-				else if (hat == GameInputSwitchDPadRight) b |= std::to_underlying(DPadRight);
+				if (hat == GameInputSwitchUp) b |= std::to_underlying(DPadUp);
+				else if (hat == GameInputSwitchDown) b |= std::to_underlying(DPadDown);
+				else if (hat == GameInputSwitchLeft) b |= std::to_underlying(DPadLeft);
+				else if (hat == GameInputSwitchRight) b |= std::to_underlying(DPadRight);
 			}
 			gs.buttons = b;
 			reading->Release();
