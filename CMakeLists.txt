@@ -50,7 +50,13 @@ target_compile_definitions(MultiPadTester PRIVATE
 
 if(USE_GAMEINPUT AND GAMEINPUT_ROOT)
 	target_include_directories(MultiPadTester PRIVATE ${GAMEINPUT_ROOT}/include)
-	target_link_directories(MultiPadTester PRIVATE ${GAMEINPUT_ROOT}/lib)
+	# Microsoft.GameInput NuGet places arch-specific libs under lib/x64 or lib/x86
+	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+		set(GAMEINPUT_LIB_DIR "${GAMEINPUT_ROOT}/lib/x64")
+	else()
+		set(GAMEINPUT_LIB_DIR "${GAMEINPUT_ROOT}/lib/x86")
+	endif()
+	target_link_directories(MultiPadTester PRIVATE ${GAMEINPUT_LIB_DIR})
 	target_link_libraries(MultiPadTester PRIVATE GameInput.lib)
 	target_compile_definitions(MultiPadTester PRIVATE USE_GAMEINPUT)
 	# Delay-load GameInput.dll so the app starts even when the redist is not installed

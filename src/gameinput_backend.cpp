@@ -58,12 +58,12 @@ struct GameInputBackend::Impl
 	std::array<std::string, GameInputBackend::kMaxDevices> slotDisplayNames;
 
 	static void CALLBACK DeviceCallback(
-		GameInputCallbackToken,
+		[[maybe_unused]] GameInputCallbackToken token,
 		void* context,
 		IGameInputDevice* device,
-		uint64_t,
+		[[maybe_unused]] uint64_t timestamp,
 		GameInputDeviceStatus currentStatus,
-		GameInputDeviceStatus)
+		[[maybe_unused]] GameInputDeviceStatus previousStatus)
 	{
 		auto* self = static_cast<Impl*>(context);
 		std::scoped_lock lock(self->mutex);
@@ -200,7 +200,7 @@ GameInputBackend::~GameInputBackend()
 	{
 		std::scoped_lock lock(impl_->mutex);
 		if (impl_->input && impl_->callbackToken)
-			impl_->input->UnregisterCallback(impl_->callbackToken, 0);
+			impl_->input->UnregisterCallback(impl_->callbackToken, 500000); // 0.5s timeout to allow in-flight DeviceCallback to finish
 		for (auto& d : impl_->devices)
 			if (d.device)
 				d.device->Release();
@@ -235,7 +235,7 @@ void GameInputBackend::Init(HWND)
 	}
 	// RegisterDeviceCallback may synchronously invoke DeviceCallback (e.g. with
 	// GameInputBlockingEnumeration); do not hold impl_->mutex across this call.
-	impl_->input->RegisterDeviceCallback(
+	HRESULT hr = impl_->input->RegisterDeviceCallback(
 		nullptr,
 		GameInputKindController,
 		GameInputDeviceAnyStatus,
@@ -243,6 +243,17 @@ void GameInputBackend::Init(HWND)
 		impl_.get(),
 		&Impl::DeviceCallback,
 		&impl_->callbackToken);
+	if (FAILED(hr))
+	{
+		if (impl_->dispatcher)
+		{
+			impl_->dispatcher->Release();
+			impl_->dispatcher = nullptr;
+		}
+		impl_->input->Release();
+		impl_->input = nullptr;
+		return;
+	}
 }
 
 void GameInputBackend::Poll()
@@ -295,7 +306,7 @@ void GameInputBackend::Poll()
 			auto axisVal = [&](int sem) -> float {
 				int idx = slotDev.axisIndex[sem];
 				if (idx < 0 || std::cmp_greater_equal(idx, axisCount))
-					return (sem >= 4) ? 0.f : 0.f; // triggers 0, sticks 0 (center)
+					return 0.f;
 				float raw = axes[idx];
 				float rest = slotDev.axisRest[sem];
 				if (sem >= 4) // triggers: 0..1
@@ -335,10 +346,18 @@ void GameInputBackend::Poll()
 			if (kMaxSwitches > 0)
 			{
 				GameInputSwitchPosition hat = switches[0];
-				if (hat == GameInputSwitchUp) b |= std::to_underlying(DPadUp);
-				else if (hat == GameInputSwitchDown) b |= std::to_underlying(DPadDown);
-				else if (hat == GameInputSwitchLeft) b |= std::to_underlying(DPadLeft);
-				else if (hat == GameInputSwitchRight) b |= std::to_underlying(DPadRight);
+				switch (hat)
+				{
+				case GameInputSwitchUp:         b |= std::to_underlying(DPadUp); break;
+				case GameInputSwitchUpRight:   b |= std::to_underlying(DPadUp) | std::to_underlying(DPadRight); break;
+				case GameInputSwitchRight:     b |= std::to_underlying(DPadRight); break;
+				case GameInputSwitchDownRight: b |= std::to_underlying(DPadDown) | std::to_underlying(DPadRight); break;
+				case GameInputSwitchDown:      b |= std::to_underlying(DPadDown); break;
+				case GameInputSwitchDownLeft:  b |= std::to_underlying(DPadDown) | std::to_underlying(DPadLeft); break;
+				case GameInputSwitchLeft:      b |= std::to_underlying(DPadLeft); break;
+				case GameInputSwitchUpLeft:    b |= std::to_underlying(DPadUp) | std::to_underlying(DPadLeft); break;
+				default: break;
+				}
 			}
 			gs.buttons = b;
 			reading->Release();

@@ -36,6 +36,10 @@ jobs:
             $subdir = Get-ChildItem -Path $sdkDir -Directory | Select-Object -First 1
             if ($subdir) { $nativePath = (Join-Path $subdir.FullName "build\native") }
           }
+          if (-not (Test-Path $nativePath)) {
+            Write-Error "GameInput SDK build/native not found under $sdkDir"
+            exit 1
+          }
           $nativePath = (Resolve-Path $nativePath).Path
           echo "GAMEINPUT_ROOT=$nativePath" >> $env:GITHUB_ENV
 
