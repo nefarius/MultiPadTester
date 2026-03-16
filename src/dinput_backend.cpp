@@ -1,6 +1,7 @@
 #include "dinput_backend.h"
 #include "sony_layout.h"
 #include "usb_names.h"
+#include "xbox_wireless_hid.h"
 #include <algorithm>
 #include <ranges>
 #include <utility>
@@ -99,8 +100,26 @@ void DInputBackend::Poll()
 			gs.leftStickY = -NormStick(js.lY);
 			gs.rightStickX = NormStick(js.lRx);
 			gs.rightStickY = -NormStick(js.lRy);
-			gs.leftTrigger = NormTrigger(js.lZ);
-			gs.rightTrigger = NormTrigger(js.lRz);
+			if (XboxWireless_IsDevice(dev.vendorId, dev.productId))
+			{
+				// Xbox Wireless exposes a single combined axis on lZ: center=rest, upper half=LT, lower half=RT.
+				const float lZ = static_cast<float>(js.lZ);
+				if (lZ >= 32768.0f)
+				{
+					gs.leftTrigger = std::clamp((lZ - 32768.0f) / 32767.0f, 0.0f, 1.0f);
+					gs.rightTrigger = 0.0f;
+				}
+				else
+				{
+					gs.leftTrigger = 0.0f;
+					gs.rightTrigger = std::clamp((32768.0f - lZ) / 32768.0f, 0.0f, 1.0f);
+				}
+			}
+			else
+			{
+				gs.leftTrigger = NormTrigger(js.lZ);
+				gs.rightTrigger = NormTrigger(js.lRz);
+			}
 		}
 
 		uint16_t btns = 0;
