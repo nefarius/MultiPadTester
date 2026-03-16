@@ -1,4 +1,6 @@
 #include "gameinput_backend.h"
+#include "sony_layout.h"
+#include "usb_names.h"
 #include <GameInput.h>
 
 #include <algorithm>
@@ -44,6 +46,8 @@ struct GameInputBackend::Impl
 		IGameInputDevice* device = nullptr;
 		int slot = -1;
 		std::string displayName;
+		uint16_t vendorId = 0;
+		uint16_t productId = 0;
 	};
 	std::vector<SlotDevice> devices;
 	std::array<GamepadState, GameInputBackend::kMaxDevices> states{};
@@ -69,9 +73,12 @@ struct GameInputBackend::Impl
 			if (slot < 0)
 				return;
 			device->AddRef();
+			uint16_t vid = 0, pid = 0;
 			std::string displayNameStr = "Controller " + std::to_string(slot);
 			if (const GameInputDeviceInfo* info = device->GetDeviceInfo())
 			{
+				vid = info->vendorId;
+				pid = info->productId;
 				// displayName is GameInputString const* (UTF-8); often null per documentation
 				if (info->displayName && info->displayName->data && info->displayName->sizeInBytes > 0)
 				{
@@ -79,8 +86,14 @@ struct GameInputBackend::Impl
 					while (!displayNameStr.empty() && displayNameStr.back() == '\0')
 						displayNameStr.pop_back();
 				}
+				// If still generic, use VID/PID so Sony/Xbox names and UI layout (texture) are correct
+				if (displayNameStr.empty() || displayNameStr.find("Controller ") == 0)
+				{
+					if (const char* friendly = GetFriendlyName(vid, pid))
+						displayNameStr = friendly;
+				}
 			}
-			self->devices.push_back({ device, slot, std::move(displayNameStr) });
+			self->devices.push_back({ device, slot, std::move(displayNameStr), vid, pid });
 			self->slotDisplayNames[static_cast<size_t>(slot)] = self->devices.back().displayName;
 		}
 		else
@@ -222,18 +235,48 @@ void GameInputBackend::Poll()
 			reading->GetControllerSwitchState(kMaxSwitches, switches);
 			auto& gs = impl_->states[static_cast<size_t>(slot)];
 			gs.connected = true;
-			gs.leftStickX = (kMaxAxes > 0) ? axes[0] : 0.0f;
-			gs.leftStickY = (kMaxAxes > 1) ? axes[1] : 0.0f;
-			gs.rightStickX = (kMaxAxes > 2) ? axes[2] : 0.0f;
-			gs.rightStickY = (kMaxAxes > 3) ? axes[3] : 0.0f;
-			gs.leftTrigger = (kMaxAxes > 4) ? (axes[4] * 0.5f + 0.5f) : 0.0f;
-			gs.rightTrigger = (kMaxAxes > 5) ? (axes[5] * 0.5f + 0.5f) : 0.0f;
+			const bool sony = IsSonyGamepad(slotDev.vendorId, slotDev.productId);
+			if (sony)
+			{
+				// Sony HID axis order: 0,1 = left stick; 2,3 = triggers; 4,5 = right stick
+				gs.leftStickX = (kMaxAxes > 0) ? axes[0] : 0.0f;
+				gs.leftStickY = (kMaxAxes > 1) ? axes[1] : 0.0f;
+				gs.leftTrigger = (kMaxAxes > 2) ? (axes[2] * 0.5f + 0.5f) : 0.0f;
+				gs.rightTrigger = (kMaxAxes > 3) ? (axes[3] * 0.5f + 0.5f) : 0.0f;
+				gs.rightStickX = (kMaxAxes > 4) ? axes[4] : 0.0f;
+				gs.rightStickY = (kMaxAxes > 5) ? axes[5] : 0.0f;
+			}
+			else
+			{
+				gs.leftStickX = (kMaxAxes > 0) ? axes[0] : 0.0f;
+				gs.leftStickY = (kMaxAxes > 1) ? axes[1] : 0.0f;
+				gs.rightStickX = (kMaxAxes > 2) ? axes[2] : 0.0f;
+				gs.rightStickY = (kMaxAxes > 3) ? axes[3] : 0.0f;
+				gs.leftTrigger = (kMaxAxes > 4) ? (axes[4] * 0.5f + 0.5f) : 0.0f;
+				gs.rightTrigger = (kMaxAxes > 5) ? (axes[5] * 0.5f + 0.5f) : 0.0f;
+			}
 			uint16_t b = 0;
 			using enum Button;
-			if (kMaxButtons > 0 && buttons[0]) b |= std::to_underlying(A);
-			if (kMaxButtons > 1 && buttons[1]) b |= std::to_underlying(B);
-			if (kMaxButtons > 2 && buttons[2]) b |= std::to_underlying(X);
-			if (kMaxButtons > 3 && buttons[3]) b |= std::to_underlying(Y);
+			if (sony)
+			{
+				for (int i = 0; i < 13 && i < kMaxButtons; ++i)
+					if (buttons[i])
+						b |= MapButtonSonyDInput(i);
+			}
+			else
+			{
+				if (kMaxButtons > 0 && buttons[0]) b |= std::to_underlying(A);
+				if (kMaxButtons > 1 && buttons[1]) b |= std::to_underlying(B);
+				if (kMaxButtons > 2 && buttons[2]) b |= std::to_underlying(X);
+				if (kMaxButtons > 3 && buttons[3]) b |= std::to_underlying(Y);
+				// Common bumper/thumb/start/back indices when present
+				if (kMaxButtons > 4 && buttons[4]) b |= std::to_underlying(LeftBumper);
+				if (kMaxButtons > 5 && buttons[5]) b |= std::to_underlying(RightBumper);
+				if (kMaxButtons > 6 && buttons[6]) b |= std::to_underlying(Back);
+				if (kMaxButtons > 7 && buttons[7]) b |= std::to_underlying(Start);
+				if (kMaxButtons > 8 && buttons[8]) b |= std::to_underlying(LeftThumb);
+				if (kMaxButtons > 9 && buttons[9]) b |= std::to_underlying(RightThumb);
+			}
 			if (kMaxSwitches > 0)
 			{
 				GameInputSwitchPosition hat = switches[0];
