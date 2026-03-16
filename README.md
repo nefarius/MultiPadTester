@@ -56,6 +56,17 @@ cmake --build --preset release
 
 The resulting binary is at `build/Release/MultiPadTester.exe`.
 
+### Optional: GameInput backend
+
+An additional backend using the Microsoft GameInput API (GDK) can be built if you have the [Microsoft.GameInput](https://www.nuget.org/packages/Microsoft.GameInput) NuGet package. It provides a unified interface for Xbox and HID controllers (Xbox 360 is not supported). Enable it by setting the CMake option `USE_GAMEINPUT=ON` and the path variable `GAMEINPUT_ROOT` to the folder that contains the GameInput SDK (e.g. after extracting the NuGet package, point to the path that has `include/` and `lib/` with `GameInput.h` and `GameInput.lib`).
+
+Example (PowerShell):
+
+```PowerShell
+cmake --preset default -DUSE_GAMEINPUT=ON -DGAMEINPUT_ROOT="C:\path\to\Microsoft.GameInput\build\native"
+cmake --build --preset release
+```
+
 ## Sources & 3rd party credits
 
 This project benefits from these awesome projects (in no particular order):
