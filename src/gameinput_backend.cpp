@@ -334,7 +334,7 @@ void GameInputBackend::Poll()
 			const uint32_t axisCount = reading->GetControllerAxisCount();
 			auto axisVal = [&](int sem) -> float {
 				int idx = slotDev.axisIndex[sem];
-				if (idx < 0 || std::cmp_greater_equal(idx, axisCount))
+				if (idx < 0 || idx >= kMaxAxes || std::cmp_greater_equal(idx, axisCount))
 					return 0.f;
 				float raw = axes[idx];
 				float rest = slotDev.axisRest[sem];
