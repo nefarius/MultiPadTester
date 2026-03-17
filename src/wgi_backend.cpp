@@ -16,6 +16,12 @@ namespace
 
 	constexpr int kMaxSlots = 4;
 
+	/**
+	 * @brief Converts a WinRT GamepadButtons bitmask into the internal 16-bit button mask.
+	 *
+	 * @param wgi Bitfield of WinRT GamepadButtons flags to map.
+	 * @return uint16_t Bitmask where each set bit corresponds to the internal Button enum value for a pressed button.
+	 */
 	uint16_t MapGamepadButtons(GamepadButtons wgi)
 	{
 		uint16_t b = 0;
@@ -37,6 +43,17 @@ namespace
 		return b;
 	}
 
+	/**
+	 * @brief Obtains a human-friendly display name for a gamepad, falling back to a numbered default.
+	 *
+	 * Attempts to retrieve the controller's DisplayName from its RawGameController representation.
+	 * If a display name is unavailable or retrieval fails, returns "Gamepad N" where N is
+	 * slotIndex + 1.
+	 *
+	 * @param pad WinRT Gamepad instance to query.
+	 * @param slotIndex Zero-based slot index used to generate the fallback name.
+	 * @return std::string The resolved display name or a fallback like "Gamepad 1".
+	 */
 	std::string GetDisplayNameForGamepad(Gamepad const& pad, int slotIndex)
 	{
 		try
@@ -53,6 +70,18 @@ namespace
 		return "Gamepad " + std::to_string(slotIndex + 1);
 	}
 
+	/**
+	 * @brief Retrieve the hardware vendor and product IDs for a gamepad.
+	 *
+	 * Attempts to obtain the controller's hardware vendor and product identifiers
+	 * and writes them to the provided pointers. If retrieval fails or the
+	 * identifiers are unavailable, writes 0 to the corresponding outputs.
+	 * If both output pointers are null, the function does nothing.
+	 *
+	 * @param pad The gamepad to query.
+	 * @param vendorId Pointer to receive the vendor ID, or nullptr to skip.
+	 * @param productId Pointer to receive the product ID, or nullptr to skip.
+	 */
 	void GetDeviceIdsForGamepad(Gamepad const& pad, uint16_t* vendorId, uint16_t* productId)
 	{
 		if (!vendorId && !productId) return;
@@ -84,6 +113,14 @@ struct WgiBackend::Impl
 	winrt::event_token addedToken;
 	winrt::event_token removedToken;
 
+	/**
+	 * @brief Assigns a newly connected gamepad to the first available backend slot and records its metadata.
+	 *
+	 * If a free slot exists, stores the provided gamepad handle in that slot and populates the slot's
+	 * display name and vendor/product IDs. If all slots are occupied, the added gamepad is ignored.
+	 *
+	 * @param pad The gamepad that was added.
+	 */
 	void OnGamepadAdded(IInspectable const&, Gamepad const& pad)
 	{
 		std::lock_guard lock(mutex);
@@ -99,6 +136,14 @@ struct WgiBackend::Impl
 		}
 	}
 
+	/**
+	 * @brief Handles a gamepad removal event by clearing the corresponding slot.
+	 *
+	 * Searches the tracked slots for the given gamepad handle; when a match is found,
+	 * removes the stored handle and resets the slot's vendor and product IDs to zero.
+	 *
+	 * @param pad The gamepad that was removed.
+	 */
 	void OnGamepadRemoved(IInspectable const&, Gamepad const& pad)
 	{
 		std::lock_guard lock(mutex);
@@ -126,6 +171,13 @@ WgiBackend::~WgiBackend()
 	}
 }
 
+/**
+ * @brief Initialize the WinRT gamepad backend, enumerate currently connected gamepads, and subscribe to add/remove events.
+ *
+ * Initializes the WinRT apartment once per thread, acquires the internal mutex, populates up to kMaxSlots with already-connected gamepads (storing each slot's handle, display name, and vendor/product IDs), and registers handlers for future GamepadAdded and GamepadRemoved events, saving their subscription tokens.
+ *
+ * @param hwnd Window handle provided for initialization context; currently accepted for API compatibility and not otherwise used.
+ */
 void WgiBackend::Init(HWND)
 {
 	thread_local static bool winrtInitialized = false;
@@ -198,6 +250,12 @@ const GamepadState& WgiBackend::GetState(int slot) const
 
 const char* WgiBackend::GetName() const { return Name; }
 
+/**
+ * @brief Retrieves the human-readable display name for a gamepad slot.
+ *
+ * @param slot Zero-based slot index.
+ * @return const char* Pointer to a null-terminated C string containing the display name for the given slot, or `nullptr` if the slot index is out of range or no gamepad is present in that slot. The returned pointer is valid until the next call to GetSlotDisplayName on the same thread.
+ */
 const char* WgiBackend::GetSlotDisplayName(int slot) const
 {
 	if (slot < 0 || slot >= kMaxSlots) return nullptr;
@@ -208,6 +266,15 @@ const char* WgiBackend::GetSlotDisplayName(int slot) const
 	return slotResultBuffers[slot].c_str();
 }
 
+/**
+ * @brief Retrieve the vendor and product identifiers for a slot's gamepad.
+ *
+ * Writes the 16-bit vendor and product IDs for the gamepad in the given slot into the provided output pointers. If the slot index is out of range or no gamepad is present in that slot, `0` is written for each ID. Passing a `nullptr` for either output pointer suppresses writing that value.
+ *
+ * @param slot Slot index (0 .. kMaxSlots - 1) to query.
+ * @param vendorId Pointer that receives the vendor ID, or `nullptr` to ignore.
+ * @param productId Pointer that receives the product ID, or `nullptr` to ignore.
+ */
 void WgiBackend::GetSlotDeviceIds(int slot, uint16_t* vendorId, uint16_t* productId) const
 {
 	if (slot < 0 || slot >= kMaxSlots)
