@@ -70,3 +70,4 @@ This project benefits from these awesome projects (in no particular order):
 - [WIL](https://github.com/microsoft/wil) &mdash; Windows Implementation Libraries
 - [vcpkg](https://github.com/microsoft/vcpkg) &mdash; C++ package manager for dependency acquisition
 - [gameinput](https://vcpkg.io/en/package/gameinput) (vcpkg) &mdash; GameInput SDK for the GDK input backend; at runtime the [GameInput redistributable](https://aka.ms/gameinput) must be installed for the GameInput tab to appear
+- [Joystick Input Examples](https://github.com/MysteriousJ/Joystick-Input-Examples?tab=readme-ov-file) &mdash; Code and comprehensive explanations of game controller I/O on PC
