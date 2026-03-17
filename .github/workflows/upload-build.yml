@@ -21,8 +21,7 @@ jobs:
       - name: Get GameInput SDK
         shell: pwsh
         run: |
-          $index = Invoke-RestMethod -Uri 'https://api.nuget.org/v3-flatcontainer/microsoft.gameinput/index.json' -UseBasicParsing
-          $version = $index.versions[-1]
+          $version = "3.3.163"
           $nupkgUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.gameinput/$version/microsoft.gameinput.$version.nupkg"
           $sdkDir = "$env:RUNNER_TEMP\GameInputSdk"
           New-Item -ItemType Directory -Path $sdkDir -Force | Out-Null

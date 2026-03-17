@@ -79,8 +79,15 @@ struct GameInputBackend::Impl
 			device->AddRef();
 			uint16_t vid = 0, pid = 0;
 			std::string displayNameStr = "Controller " + std::to_string(slot);
+#if defined(GAMEINPUT_API_VERSION) && GAMEINPUT_API_VERSION >= 1
+			const GameInputDeviceInfo* infoPtr = nullptr;
+			if (SUCCEEDED(device->GetDeviceInfo(&infoPtr)) && infoPtr)
+			{
+				const GameInputDeviceInfo* info = infoPtr;
+#else
 			if (const GameInputDeviceInfo* info = device->GetDeviceInfo())
 			{
+#endif
 				vid = info->vendorId;
 				pid = info->productId;
 				// displayName is GameInputString const* (UTF-8); often null per documentation
@@ -100,8 +107,14 @@ struct GameInputBackend::Impl
 			const bool sony = IsSonyGamepad(vid, pid);
 			std::array<int, 6> axisIndex = { -1, -1, -1, -1, -1, -1 };
 			std::array<float, 6> axisRest = { 0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f };
+#if defined(GAMEINPUT_API_VERSION) && GAMEINPUT_API_VERSION >= 1
+			if (infoPtr && infoPtr->controllerAxisInfo)
+			{
+				const GameInputDeviceInfo* info = infoPtr;
+#else
 			if (const GameInputDeviceInfo* info = device->GetDeviceInfo(); info && info->controllerAxisInfo)
 			{
+#endif
 				// Map controller axes by label (triggers) and legacy DInput index (sticks). DInput order: 0=lX, 1=lY, 2=lZ, 3=lRx, 4=lRy, 5=lRz.
 				// Non-Sony: 0,1=left stick; 3,4=right stick; 2,5=triggers. Sony: 0,1=left stick; 2,5=right stick; 3,4=triggers.
 				for (uint32_t i = 0; i < info->controllerAxisCount; ++i)
@@ -200,7 +213,13 @@ GameInputBackend::~GameInputBackend()
 	{
 		std::scoped_lock lock(impl_->mutex);
 		if (impl_->input && impl_->callbackToken)
+		{
+#if defined(GAMEINPUT_API_VERSION) && GAMEINPUT_API_VERSION >= 1
+			impl_->input->UnregisterCallback(impl_->callbackToken);
+#else
 			impl_->input->UnregisterCallback(impl_->callbackToken, 500000); // 0.5s timeout to allow in-flight DeviceCallback to finish
+#endif
+		}
 		for (auto& d : impl_->devices)
 			if (d.device)
 				d.device->Release();
