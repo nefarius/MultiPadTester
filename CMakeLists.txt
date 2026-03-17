@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(MultiPadTester LANGUAGES CXX)
+project(MultiPadTester LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
