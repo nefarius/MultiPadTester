@@ -1,7 +1,9 @@
 #include "gameinput_backend.h"
 #include "sony_layout.h"
 #include "usb_names.h"
-#include <GameInput.h>
+#include <gameinput.h>
+
+using namespace GameInput::v3;
 
 #include <algorithm>
 #include <array>
@@ -79,24 +81,15 @@ struct GameInputBackend::Impl
 			device->AddRef();
 			uint16_t vid = 0, pid = 0;
 			std::string displayNameStr = "Controller " + std::to_string(slot);
-#if defined(GAMEINPUT_API_VERSION) && GAMEINPUT_API_VERSION >= 1
 			const GameInputDeviceInfo* infoPtr = nullptr;
 			if (SUCCEEDED(device->GetDeviceInfo(&infoPtr)) && infoPtr)
 			{
 				const GameInputDeviceInfo* info = infoPtr;
-#else
-			if (const GameInputDeviceInfo* info = device->GetDeviceInfo())
-			{
-#endif
 				vid = info->vendorId;
 				pid = info->productId;
-				// displayName is GameInputString const* (UTF-8); often null per documentation
-				if (info->displayName && info->displayName->data && info->displayName->sizeInBytes > 0)
-				{
-					displayNameStr.assign(info->displayName->data, info->displayName->sizeInBytes);
-					while (!displayNameStr.empty() && displayNameStr.back() == '\0')
-						displayNameStr.pop_back();
-				}
+				// v3: displayName is const char* (UTF-8); often null per documentation
+				if (info->displayName && info->displayName[0])
+					displayNameStr = info->displayName;
 				// If still generic, use VID/PID so Sony/Xbox names and UI layout (texture) are correct
 				if (displayNameStr.empty() || displayNameStr.find("Controller ") == 0)
 				{
@@ -107,46 +100,26 @@ struct GameInputBackend::Impl
 			const bool sony = IsSonyGamepad(vid, pid);
 			std::array<int, 6> axisIndex = { -1, -1, -1, -1, -1, -1 };
 			std::array<float, 6> axisRest = { 0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f };
-#if defined(GAMEINPUT_API_VERSION) && GAMEINPUT_API_VERSION >= 1
-			if (infoPtr && infoPtr->controllerAxisInfo)
+			// v3: use controllerInfo (controllerAxisCount + controllerAxisLabels); map triggers by label only
+			if (infoPtr && infoPtr->controllerInfo)
 			{
-				const GameInputDeviceInfo* info = infoPtr;
-#else
-			if (const GameInputDeviceInfo* info = device->GetDeviceInfo(); info && info->controllerAxisInfo)
-			{
-#endif
-				// Map controller axes by label (triggers) and legacy DInput index (sticks). DInput order: 0=lX, 1=lY, 2=lZ, 3=lRx, 4=lRy, 5=lRz.
-				// Non-Sony: 0,1=left stick; 3,4=right stick; 2,5=triggers. Sony: 0,1=left stick; 2,5=right stick; 3,4=triggers.
-				for (uint32_t i = 0; i < info->controllerAxisCount; ++i)
+				const GameInputControllerInfo* ctrl = infoPtr->controllerInfo;
+				for (uint32_t i = 0; i < ctrl->controllerAxisCount && i < 6; ++i)
 				{
-					const auto& ax = info->controllerAxisInfo[i];
-					float rest = ax.hasRestValue ? ax.restValue : 0.5f;
+					GameInputLabel lab = ctrl->controllerAxisLabels[i];
 					int sem = -1;
-					if (ax.label == GameInputLabelXboxLeftTrigger)
+					if (lab == GameInputLabelXboxLeftTrigger)
 						sem = 4;
-					else if (ax.label == GameInputLabelXboxRightTrigger)
+					else if (lab == GameInputLabelXboxRightTrigger)
 						sem = 5;
-					else
-					{
-						switch (ax.legacyDInputIndex)
-						{
-						case 0: sem = 0; break; // leftStickX
-						case 1: sem = 1; break; // leftStickY
-						case 2: sem = sony ? 2 : 4; break; // Sony: rightStickX; else leftTrigger
-						case 3: sem = sony ? 4 : 2; break; // Sony: leftTrigger; else rightStickX
-						case 4: sem = sony ? 5 : 3; break; // Sony: rightTrigger; else rightStickY
-						case 5: sem = sony ? 3 : 5; break; // Sony: rightStickY; else rightTrigger
-						default: break;
-						}
-					}
 					if (sem >= 0 && sem < 6)
 					{
 						axisIndex[sem] = static_cast<int>(i);
-						axisRest[sem] = rest;
+						axisRest[sem] = (sem == 4 || sem == 5) ? 0.f : 0.5f;
 					}
 				}
 			}
-			// Fallback when device has no controllerAxisInfo: assume DInput order 0=lX,1=lY,2=lZ,3=lRx,4=lRy,5=lRz
+			// Fallback when device has no controllerInfo or unmapped axes: assume DInput order 0=lX,1=lY,2=lZ,3=lRx,4=lRy,5=lRz
 			if (axisIndex[0] < 0)
 			{
 				axisRest[0] = axisRest[1] = axisRest[2] = axisRest[3] = 0.5f;
