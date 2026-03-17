@@ -23,6 +23,9 @@
 #include "dinput_backend.h"
 #include "hidapi_backend.h"
 #include "wgi_backend.h"
+#ifdef USE_GAMEINPUT
+#include "gameinput_backend.h"
+#endif
 #include "gamepad_renderer.h"
 #include "texture_loader.h"
 #include "resource.h"
@@ -379,6 +382,10 @@ int APIENTRY wWinMain(
 	backends.push_back(std::make_unique<DInputBackend>());
 	backends.push_back(std::make_unique<HidApiBackend>());
 	backends.push_back(std::make_unique<WgiBackend>());
+#ifdef USE_GAMEINPUT
+	if (GameInputBackend::IsAvailable())
+		backends.push_back(std::make_unique<GameInputBackend>());
+#endif
 	g_backends = &backends;
 
 	for (auto& b : backends)
@@ -444,6 +451,9 @@ int APIENTRY wWinMain(
 						: (name == DInputBackend::Name)  ? "Legacy API; the oldest available approach; many legacy titles use this."
 						: (name == HidApiBackend::Name)  ? "Very verbose but most universal; many modern engines use this."
 						: (name == WgiBackend::Name)     ? "Windows Runtime gamepad API; Xbox and compatible devices."
+#ifdef USE_GAMEINPUT
+						: (name == GameInputBackend::Name) ? "GDK GameInput; unified controller API, Xbox and HID devices (no Xbox 360)."
+#endif
 						: "";
 					ImGui::TextWrapped("%s", description);
 					ImGui::Spacing();

@@ -13,14 +13,14 @@ Gamepad/controller tester and visualizer for Windows, supporting multiple input 
 
 ## About
 
-MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries four different input backends in parallel and renders a real-time gamepad visualization for every connected controller using [Dear ImGui](https://github.com/ocornut/imgui) and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.
+MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries six input backends in parallel and renders a real-time gamepad visualization for every connected controller using [Dear ImGui](https://github.com/ocornut/imgui) and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.
 
 ## Features
 
-- **Multiple input backends** &mdash; XInput, Raw Input, DirectInput and HIDAPI (SetupDi / HID) are all supported out of the box.
-- **Real-time visualization** &mdash; Every connected controller is drawn as an interactive gamepad widget showing buttons, sticks and triggers as they are actuated.
+- **Multiple input backends** &mdash; XInput, Raw Input, DirectInput, HIDAPI (SetupDi / HID), [Windows.Gaming.Input](https://learn.microsoft.com/en-us/uwp/api/windows.gaming.input) (WGI), and optionally [GameInput](https://learn.microsoft.com/en-us/gaming/gdk/docs/features/common/input/overviews/input-overview) (GDK) are supported. The GameInput backend is built only when the SDK is provided and is skipped at runtime if the GameInput redistributable is not installed.
+- **Real-time visualization** &mdash; Every connected controller is drawn as an interactive gamepad widget showing buttons, sticks and triggers as they are actuated. Sony (DualSense/DualShock) and Xbox layouts are distinguished for correct mapping and artwork.
 - **Tabbed UI** &mdash; Each backend gets its own tab with a live connected-device count, so you can compare how different APIs see the same hardware.
-- **Self-contained** &mdash; Single Win32 executable, no runtime dependencies beyond the operating system.
+- **Self-contained** &mdash; Single Win32 executable; runtime dependencies are the operating system and (for the GameInput tab when enabled) the optional [GameInput redistributable](https://www.nuget.org/packages/Microsoft.GameInput).
 
 ## Configuration
 
@@ -36,6 +36,11 @@ Settings are stored in an INI file so they persist across runs. You can change t
 - [Visual Studio 2022](https://visualstudio.microsoft.com/) (or newer) with the **Desktop development with C++** workload
 - Windows 10/11 SDK
 - Git (for submodule checkout)
+
+Dependencies (fetched automatically via vcpkg during configure):
+
+- **[WIL](https://github.com/microsoft/wil)** &mdash; Windows Implementation Libraries (header/utility support)
+- **[Dear ImGui](https://github.com/ocornut/imgui)** &mdash; with docking, DX11 and Win32 bindings
 
 ### Build steps
 
@@ -56,9 +61,31 @@ cmake --build --preset release
 
 The resulting binary is at `build/Release/MultiPadTester.exe`.
 
+### Optional: GameInput backend
+
+A sixth backend uses the Microsoft **GameInput** API (GDK). It is optional at build time and at runtime:
+
+- **Build** &mdash; Enable it by providing the [Microsoft.GameInput](https://www.nuget.org/packages/Microsoft.GameInput) NuGet SDK: set `USE_GAMEINPUT=ON` and `GAMEINPUT_ROOT` to the path that contains `include/` and `lib/` (e.g. the `build/native` folder inside the extracted NuGet package).
+- **Run** &mdash; The executable delay-loads the GameInput DLL; if the [GameInput redistributable](https://learn.microsoft.com/en-us/gaming/gdk/docs/features/common/input/overviews/input-nuget) is not installed, the app starts normally and the GameInput tab is simply omitted.
+
+Quick build with GameInput using the helper script (downloads the latest NuGet, extracts it, and builds):
+
+```PowerShell
+.\scripts\build-with-gameinput.ps1
+```
+
+Or configure manually:
+
+```PowerShell
+cmake --preset default -DUSE_GAMEINPUT=ON -DGAMEINPUT_ROOT="C:\path\to\Microsoft.GameInput\build\native"
+cmake --build --preset release
+```
+
 ## Sources & 3rd party credits
 
 This project benefits from these awesome projects (in no particular order):
 
 - [Dear ImGui](https://github.com/ocornut/imgui) &mdash; immediate-mode GUI library used for all rendering
+- [WIL](https://github.com/microsoft/wil) &mdash; Windows Implementation Libraries
 - [vcpkg](https://github.com/microsoft/vcpkg) &mdash; C++ package manager for dependency acquisition
+- [Microsoft.GameInput](https://www.nuget.org/packages/Microsoft.GameInput) (NuGet) &mdash; optional GameInput SDK and redistributable for the GDK input backend
