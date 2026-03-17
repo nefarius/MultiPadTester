@@ -55,7 +55,7 @@ namespace
 	 * @param slotIndex Zero-based slot index used to generate the fallback name.
 	 * @return std::string The resolved display name or a fallback like "Gamepad 1".
 	 */
-	std::string GetDisplayNameForGamepad(Gamepad const& pad, int slotIndex)
+	std::string GetDisplayNameForGamepad(const Gamepad& pad, int slotIndex)
 	{
 		try
 		{
@@ -64,10 +64,12 @@ namespace
 			{
 				auto name = raw.DisplayName();
 				if (!name.empty())
-					return winrt::to_string(name);
+					return to_string(name);
 			}
 		}
-		catch (...) {}
+		catch (...)
+		{
+		}
 		return "Gamepad " + std::to_string(slotIndex + 1);
 	}
 
@@ -83,7 +85,7 @@ namespace
 	 * @param vendorId Pointer to receive the vendor ID, or nullptr to skip.
 	 * @param productId Pointer to receive the product ID, or nullptr to skip.
 	 */
-	void GetDeviceIdsForGamepad(Gamepad const& pad, uint16_t* vendorId, uint16_t* productId)
+	void GetDeviceIdsForGamepad(const Gamepad& pad, uint16_t* vendorId, uint16_t* productId)
 	{
 		if (!vendorId && !productId) return;
 		try
@@ -96,7 +98,9 @@ namespace
 				return;
 			}
 		}
-		catch (...) {}
+		catch (...)
+		{
+		}
 		if (vendorId) *vendorId = 0;
 		if (productId) *productId = 0;
 	}
@@ -111,8 +115,8 @@ struct WgiBackend::Impl
 	std::array<uint16_t, kMaxSlots> slotVendorIds{};
 	std::array<uint16_t, kMaxSlots> slotProductIds{};
 
-	winrt::event_token addedToken;
-	winrt::event_token removedToken;
+	event_token addedToken;
+	event_token removedToken;
 
 	/**
 	 * @brief Assigns a newly connected gamepad to the first available backend slot and records its metadata.
@@ -122,7 +126,7 @@ struct WgiBackend::Impl
 	 *
 	 * @param pad The gamepad that was added.
 	 */
-	void OnGamepadAdded(IInspectable const&, Gamepad const& pad)
+	void OnGamepadAdded(const IInspectable&, const Gamepad& pad)
 	{
 		std::lock_guard lock(mutex);
 		for (int i = 0; i < kMaxSlots; ++i)
@@ -145,7 +149,7 @@ struct WgiBackend::Impl
 	 *
 	 * @param pad The gamepad that was removed.
 	 */
-	void OnGamepadRemoved(IInspectable const&, Gamepad const& pad)
+	void OnGamepadRemoved(const IInspectable&, const Gamepad& pad)
 	{
 		std::lock_guard lock(mutex);
 		for (int i = 0; i < kMaxSlots; ++i)
@@ -161,7 +165,9 @@ struct WgiBackend::Impl
 	}
 };
 
-WgiBackend::WgiBackend() : impl_(std::make_unique<Impl>()) {}
+WgiBackend::WgiBackend() : impl_(std::make_unique<Impl>())
+{
+}
 
 WgiBackend::~WgiBackend()
 {
@@ -181,10 +187,10 @@ WgiBackend::~WgiBackend()
  */
 void WgiBackend::Init(HWND)
 {
-	thread_local static bool winrtInitialized = false;
+	thread_local bool winrtInitialized = false;
 	if (!winrtInitialized)
 	{
-		winrt::init_apartment();
+		init_apartment();
 		winrtInitialized = true;
 	}
 
@@ -200,13 +206,19 @@ void WgiBackend::Init(HWND)
 			impl_->slotDisplayNames[i] = GetDisplayNameForGamepad(pad, i);
 			GetDeviceIdsForGamepad(pad, &impl_->slotVendorIds[i], &impl_->slotProductIds[i]);
 		}
-		catch (winrt::hresult_out_of_bounds const&)
+		catch (const hresult_out_of_bounds&)
 		{
 			break;
 		}
 	}
-	impl_->addedToken = Gamepad::GamepadAdded([this](IInspectable const& s, Gamepad const& p) { impl_->OnGamepadAdded(s, p); });
-	impl_->removedToken = Gamepad::GamepadRemoved([this](IInspectable const& s, Gamepad const& p) { impl_->OnGamepadRemoved(s, p); });
+	impl_->addedToken = Gamepad::GamepadAdded([this](const IInspectable& s, const Gamepad& p)
+	{
+		impl_->OnGamepadAdded(s, p);
+	});
+	impl_->removedToken = Gamepad::GamepadRemoved([this](const IInspectable& s, const Gamepad& p)
+	{
+		impl_->OnGamepadRemoved(s, p);
+	});
 }
 
 void WgiBackend::Poll()
@@ -262,7 +274,7 @@ const char* WgiBackend::GetSlotDisplayName(int slot) const
 	if (slot < 0 || slot >= kMaxSlots) return nullptr;
 	std::lock_guard lock(impl_->mutex);
 	if (!impl_->slotGamepads[slot]) return nullptr;
-	thread_local static std::array<std::string, kMaxSlots> slotResultBuffers;
+	thread_local std::array<std::string, kMaxSlots> slotResultBuffers;
 	slotResultBuffers[slot] = impl_->slotDisplayNames[slot];
 	return slotResultBuffers[slot].c_str();
 }

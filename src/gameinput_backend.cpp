@@ -52,12 +52,13 @@ struct GameInputBackend::Impl
 		uint16_t vendorId = 0;
 		uint16_t productId = 0;
 		// Axis mapping: indices into GetControllerAxisState() array for [leftX, leftY, rightX, rightY, leftTrigger, rightTrigger]
-		std::array<int, 6> axisIndex = { -1, -1, -1, -1, -1, -1 };
-		std::array<float, 6> axisRest = { 0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f };
+		std::array<int, 6> axisIndex = {-1, -1, -1, -1, -1, -1};
+		std::array<float, 6> axisRest = {0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f};
 	};
+
 	std::vector<SlotDevice> devices;
-	std::array<GamepadState, GameInputBackend::kMaxDevices> states{};
-	std::array<std::string, GameInputBackend::kMaxDevices> slotDisplayNames;
+	std::array<GamepadState, kMaxDevices> states{};
+	std::array<std::string, kMaxDevices> slotDisplayNames;
 
 	static void CALLBACK DeviceCallback(
 		[[maybe_unused]] GameInputCallbackToken token,
@@ -70,7 +71,7 @@ struct GameInputBackend::Impl
 		auto* self = static_cast<Impl*>(context);
 		std::scoped_lock lock(self->mutex);
 		auto it = std::ranges::find_if(self->devices,
-			[device](const SlotDevice& d) { return d.device == device; });
+		                               [device](const SlotDevice& d) { return d.device == device; });
 		if (currentStatus & GameInputDeviceConnected)
 		{
 			if (it != self->devices.end())
@@ -98,8 +99,8 @@ struct GameInputBackend::Impl
 				}
 			}
 			const bool sony = IsSonyGamepad(vid, pid);
-			std::array<int, 6> axisIndex = { -1, -1, -1, -1, -1, -1 };
-			std::array<float, 6> axisRest = { 0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f };
+			std::array<int, 6> axisIndex = {-1, -1, -1, -1, -1, -1};
+			std::array<float, 6> axisRest = {0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f};
 			// v3: use controllerInfo (controllerAxisCount + controllerAxisLabels); map triggers by label only
 			if (infoPtr && infoPtr->controllerInfo)
 			{
@@ -127,15 +128,15 @@ struct GameInputBackend::Impl
 				if (sony)
 				{
 					// Sony: left 0,1; right stick 2,5 (lZ,lRz); triggers 3,4 (lRx,lRy)
-					axisIndex = { 0, 1, 2, 5, 3, 4 };
+					axisIndex = {0, 1, 2, 5, 3, 4};
 				}
 				else
 				{
 					// Non-Sony: left 0,1; right stick 3,4 (lRx,lRy); triggers 2,5 (lZ,lRz)
-					axisIndex = { 0, 1, 3, 4, 2, 5 };
+					axisIndex = {0, 1, 3, 4, 2, 5};
 				}
 			}
-			self->devices.push_back({ device, slot, std::move(displayNameStr), vid, pid, axisIndex, axisRest });
+			self->devices.push_back({device, slot, std::move(displayNameStr), vid, pid, axisIndex, axisRest});
 			self->slotDisplayNames[static_cast<size_t>(slot)] = self->devices.back().displayName;
 		}
 		else
@@ -153,7 +154,7 @@ struct GameInputBackend::Impl
 
 	static int AllocateSlot(const Impl* self)
 	{
-		for (int i = 0; i < GameInputBackend::kMaxDevices; ++i)
+		for (int i = 0; i < kMaxDevices; ++i)
 			if (std::ranges::none_of(self->devices,
 			                         [i](const SlotDevice& d) { return d.slot == i; }))
 				return i;
@@ -178,7 +179,9 @@ bool GameInputBackend::IsAvailable()
 	}
 }
 
-GameInputBackend::GameInputBackend() : impl_(std::make_unique<Impl>()) {}
+GameInputBackend::GameInputBackend() : impl_(std::make_unique<Impl>())
+{
+}
 
 GameInputBackend::~GameInputBackend()
 {
@@ -254,7 +257,6 @@ void GameInputBackend::Init(HWND)
 		}
 		impl_->input->Release();
 		impl_->input = nullptr;
-		return;
 	}
 }
 
@@ -305,7 +307,8 @@ void GameInputBackend::Poll()
 			auto& gs = impl_->states[static_cast<size_t>(slot)];
 			gs.connected = true;
 			const uint32_t axisCount = reading->GetControllerAxisCount();
-			auto axisVal = [&](int sem) -> float {
+			auto axisVal = [&](int sem) -> float
+			{
 				int idx = slotDev.axisIndex[sem];
 				if (idx < 0 || idx >= kMaxAxes || std::cmp_greater_equal(idx, axisCount))
 					return 0.f;
@@ -350,14 +353,22 @@ void GameInputBackend::Poll()
 				GameInputSwitchPosition hat = switches[0];
 				switch (hat)
 				{
-				case GameInputSwitchUp:         b |= std::to_underlying(DPadUp); break;
-				case GameInputSwitchUpRight:   b |= std::to_underlying(DPadUp) | std::to_underlying(DPadRight); break;
-				case GameInputSwitchRight:     b |= std::to_underlying(DPadRight); break;
-				case GameInputSwitchDownRight: b |= std::to_underlying(DPadDown) | std::to_underlying(DPadRight); break;
-				case GameInputSwitchDown:      b |= std::to_underlying(DPadDown); break;
-				case GameInputSwitchDownLeft:  b |= std::to_underlying(DPadDown) | std::to_underlying(DPadLeft); break;
-				case GameInputSwitchLeft:      b |= std::to_underlying(DPadLeft); break;
-				case GameInputSwitchUpLeft:    b |= std::to_underlying(DPadUp) | std::to_underlying(DPadLeft); break;
+				case GameInputSwitchUp: b |= std::to_underlying(DPadUp);
+					break;
+				case GameInputSwitchUpRight: b |= std::to_underlying(DPadUp) | std::to_underlying(DPadRight);
+					break;
+				case GameInputSwitchRight: b |= std::to_underlying(DPadRight);
+					break;
+				case GameInputSwitchDownRight: b |= std::to_underlying(DPadDown) | std::to_underlying(DPadRight);
+					break;
+				case GameInputSwitchDown: b |= std::to_underlying(DPadDown);
+					break;
+				case GameInputSwitchDownLeft: b |= std::to_underlying(DPadDown) | std::to_underlying(DPadLeft);
+					break;
+				case GameInputSwitchLeft: b |= std::to_underlying(DPadLeft);
+					break;
+				case GameInputSwitchUpLeft: b |= std::to_underlying(DPadUp) | std::to_underlying(DPadLeft);
+					break;
 				default: break;
 				}
 			}

@@ -74,7 +74,7 @@ const char* RawInputBackend::GetName() const { return Name; }
 const char* RawInputBackend::GetSlotDisplayName(int slot) const
 {
 	if (slot < 0 || slot >= kMaxDevices) return nullptr;
-	for (const auto& [h, d] : devices_)
+	for (const auto& d : devices_ | std::views::values)
 		if (d.slot == slot)
 			return GetFriendlyName(d.vendorId, d.productId);
 	return nullptr;
