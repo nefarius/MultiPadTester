@@ -309,22 +309,22 @@ uint16_t DInputBackend::MapPOV(DWORD pov)
 	using enum Button;
 	if (LOWORD(pov) == 0xFFFF) return 0;
 
-	constexpr uint16_t U = std::to_underlying(DPadUp);
-	constexpr uint16_t D = std::to_underlying(DPadDown);
-	constexpr uint16_t L = std::to_underlying(DPadLeft);
-	constexpr uint16_t R = std::to_underlying(DPadRight);
+	constexpr uint16_t N = std::to_underlying(DPadUp);
+	constexpr uint16_t S = std::to_underlying(DPadDown);
+	constexpr uint16_t W = std::to_underlying(DPadLeft);
+	constexpr uint16_t E = std::to_underlying(DPadRight);
 
 	// POV is in hundredths of degrees: 0=N, 4500=NE, 9000=E, ...
 	switch (pov)
 	{
-	case 0: return U;
-	case 4500: return U | R;
-	case 9000: return R;
-	case 13500: return D | R;
-	case 18000: return D;
-	case 22500: return D | L;
-	case 27000: return L;
-	case 31500: return U | L;
+	case 0: return N;
+	case 4500: return N | E;
+	case 9000: return E;
+	case 13500: return S | E;
+	case 18000: return S;
+	case 22500: return S | W;
+	case 27000: return W;
+	case 31500: return N | W;
 	default: return 0;
 	}
 }

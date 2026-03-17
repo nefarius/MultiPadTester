@@ -371,19 +371,19 @@ uint16_t RawInputBackend::MapHat(const ULONG val, const HIDP_VALUE_CAPS& vc)
 	int dir = v - vc.LogicalMin;
 	int range = vc.LogicalMax - vc.LogicalMin + 1;
 
-	constexpr uint16_t U = std::to_underlying(DPadUp);
-	constexpr uint16_t D = std::to_underlying(DPadDown);
-	constexpr uint16_t L = std::to_underlying(DPadLeft);
-	constexpr uint16_t R = std::to_underlying(DPadRight);
+	constexpr uint16_t N = std::to_underlying(DPadUp);
+	constexpr uint16_t S = std::to_underlying(DPadDown);
+	constexpr uint16_t W = std::to_underlying(DPadLeft);
+	constexpr uint16_t E = std::to_underlying(DPadRight);
 
 	if (range == 8)
 	{
-		constexpr uint16_t t[] = {U, U | R, R, D | R, D, D | L, L, U | L};
+		constexpr uint16_t t[] = {N, N | E, E, S | E, S, S | W, W, N | W};
 		return (dir >= 0 && dir < 8) ? t[dir] : 0;
 	}
 	if (range == 4)
 	{
-		constexpr uint16_t t[] = {U, R, D, L};
+		constexpr uint16_t t[] = {N, E, S, W};
 		return (dir >= 0 && dir < 4) ? t[dir] : 0;
 	}
 	return 0;
