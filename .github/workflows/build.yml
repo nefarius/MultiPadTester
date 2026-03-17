@@ -16,6 +16,15 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install vpatch
+        run: dotnet tool install --global Nefarius.Tools.Vpatch
+
+      - name: Stamp version in resource file
+        shell: pwsh
+        run: |
+          $version = "0.0.${{ github.run_number }}"
+          vpatch --stamp-version $version --target-file "res\app.rc" --resource.file-version --resource.product-version
+
       - name: Bootstrap vcpkg
         run: vcpkg/bootstrap-vcpkg.bat
 
