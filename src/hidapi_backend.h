@@ -19,43 +19,43 @@ public:
 	static constexpr int kMaxDevices = 16;
 
 	~HidApiBackend() override;
+
 	/**
-	 * Poll HID devices, process incoming reports, and update internal gamepad states.
-	 */
-	 
-	/**
-	 * Return the maximum number of device slots supported by this backend.
-	 * @returns The maximum number of slots.
-	 */
-	 
-	/**
-	 * Retrieve the current gamepad state for a given slot.
-	 * @param slot Index of the slot to query; valid range is 0 .. GetMaxSlots()-1.
-	 * @returns Reference to the GamepadState for the specified slot.
-	 */
-	 
-	/**
-	 * Get the backend name identifier.
-	 * @returns Null-terminated string identifying this backend.
-	 */
-	 
-	/**
-	 * Get a human-readable display name for the device assigned to a slot.
-	 * @param slot Index of the slot to query; valid range is 0 .. GetMaxSlots()-1.
-	 * @returns A null-terminated display name for the slot, or nullptr when no name is available.
-	 */
-	 
-	/**
-	 * Per-device runtime information and resources used to manage a HID device.
+	 * Poll HID devices, read pending reports, and update cached gamepad state.
 	 *
-	 * Contains device path, OS handle and overlapped I/O state, read buffer,
-	 * HID preparsed data and capability descriptors, assigned slot index, flags
-	 * tracking discovery and read state, and the device's vendor/product IDs.
+	 * This method also advances device discovery and removes disconnected devices
+	 * from the backend's internal slot mapping.
 	 */
 	void Poll() override;
+
+	/**
+	 * Return the maximum number of device slots supported by this backend.
+	 *
+	 * @return Maximum supported slot count.
+	 */
 	[[nodiscard]] int GetMaxSlots() const override;
+
+	/**
+	 * Retrieve the current gamepad state for a slot.
+	 *
+	 * @param slot Zero-based slot index.
+	 * @return Reference to the cached `GamepadState` for the requested slot.
+	 */
 	[[nodiscard]] const GamepadState& GetState(int slot) const override;
+
+	/**
+	 * Get the backend name used in the UI and logs.
+	 *
+	 * @return Null-terminated backend name string.
+	 */
 	[[nodiscard]] const char* GetName() const override;
+
+	/**
+	 * Get the human-readable device name for a slot, if available.
+	 *
+	 * @param slot Zero-based slot index.
+	 * @return Device display name, or `nullptr` if unavailable.
+	 */
 	[[nodiscard]] const char* GetSlotDisplayName(int slot) const override;
 
 private:

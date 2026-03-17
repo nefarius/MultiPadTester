@@ -3,46 +3,13 @@
 #include "imgui.h"
 #include <algorithm>
 
-/**
-	 * Layout for mapping logical gamepad coordinates to screen space.
-	 *
-	 * Encapsulates an origin and separate X/Y scale factors used to transform
-	 * positions and sizes from the layout's logical coordinate system into
-	 * screen coordinates.
-	 */
-	 
-	/**
-	 * Transform a logical point into screen coordinates by applying the layout origin and scaling.
-	 * @param x X coordinate in the layout's logical coordinate space.
-	 * @param y Y coordinate in the layout's logical coordinate space.
-	 * @returns The transformed point in screen coordinates.
-	 */
-	 
-	/**
-	 * Scale a scalar value using the layout's uniform scale (the smaller of sx and sy).
-	 * @param v Value in the layout's logical units.
-	 * @returns The value scaled into screen units.
-	 */
-	namespace GamepadRenderer
+namespace GamepadRenderer
 {
 	/**
-	 * @brief Holds an origin and per-axis scale factors for converting logical gamepad coordinates to screen space.
+	 * Layout for mapping logical gamepad coordinates to screen space.
 	 *
-	 * The origin is a screen-space offset applied after scaling. sx and sy are the horizontal and vertical
-	 * scale factors, respectively, used to map logical coordinates into the panel's pixel coordinates.
-	 */
-	
-	/**
-	 * @brief Map a logical (x, y) coordinate to a screen-space point using this layout.
-	 * @param x Logical x coordinate.
-	 * @param y Logical y coordinate.
-	 * @returns Screen-space ImVec2 obtained by applying the per-axis scales and then adding the origin offset.
-	 */
-	
-	/**
-	 * @brief Scale a scalar value uniformly using the smaller of the two axis scales.
-	 * @param v Value in logical units to scale.
-	 * @returns The value multiplied by min(sx, sy).
+	 * The layout stores a screen-space origin and per-axis scale factors used to
+	 * convert logical coordinates into pixels for rendering controller artwork.
 	 */
 	enum class LayoutType { Xbox, Sony };
 
@@ -54,14 +21,41 @@
 		ImVec2 origin;
 		float sx, sy;
 
+		/**
+		 * Transform a logical point into screen coordinates.
+		 *
+		 * @param x X coordinate in logical layout units.
+		 * @param y Y coordinate in logical layout units.
+		 * @return Screen-space position after scaling and origin offset.
+		 */
 		[[nodiscard]] ImVec2 P(float x, float y) const
 		{
 			return ImVec2(origin.x + x * sx, origin.y + y * sy);
 		}
 
+		/**
+		 * Scale a scalar using the smaller of the layout's axis scales.
+		 *
+		 * @param v Value in logical units.
+		 * @return Scaled value in screen units.
+		 */
 		[[nodiscard]] float S(float v) const { return v * std::min(sx, sy); }
 	};
 
+	/**
+	 * Draw a gamepad representation in the given ImGui draw list.
+	 *
+	 * @param dl Target draw list.
+	 * @param panelPos Top-left position of the drawing panel.
+	 * @param panelSize Size of the drawing panel.
+	 * @param gs Current gamepad state to visualize.
+	 * @param slotIndex Controller slot index shown in the overlay.
+	 * @param backendName Backend name shown in the overlay.
+	 * @param displayName Optional human-readable device name.
+	 * @param bodyTexture Optional body texture for the controller.
+	 * @param textureSizeLogical Logical texture size used for layout scaling.
+	 * @param layoutType Controller layout to use.
+	 */
 	void DrawGamepad(ImDrawList* dl, ImVec2 panelPos, ImVec2 panelSize,
 	                 const GamepadState& gs, int slotIndex, const char* backendName,
 	                 const char* displayName = nullptr,

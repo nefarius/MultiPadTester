@@ -16,50 +16,43 @@ public:
 
 	void Init(HWND hwnd) override;
 	bool OnWindowMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
+
 	/**
-	 * Poll input backend and update internal per-slot gamepad states.
+	 * Poll connected raw-input devices and update cached gamepad states.
 	 *
-	 * This performs a single polling pass to process pending input events and refresh
-	 * stored GamepadState for each active slot.
-	 */
-	 
-	/**
-	 * Return the maximum number of device slots supported by this backend.
-	 *
-	 * @returns The maximum number of slots available for gamepad devices.
-	 */
-	 
-	/**
-	 * Return the current GamepadState for a given slot.
-	 *
-	 * @param slot Index of the slot to query (0-based).
-	 * @returns Reference to the stored GamepadState for the specified slot.
-	 */
-	 
-	/**
-	 * Return the backend's human-readable name.
-	 *
-	 * @returns A null-terminated string containing the backend name.
-	 */
-	 
-	/**
-	 * Return the display name for a specific slot.
-	 *
-	 * @param slot Index of the slot to query (0-based).
-	 * @returns A null-terminated string on success; nullptr when no display name is available.
-	 *          The returned pointer is valid for the lifetime of this backend; caller does not take ownership.
-	 */
-	 
-	/**
-	 * Information tracked for a single raw input device.
-	 *
-	 * Contains the device handle, cached preparsed HID data and capability structures,
-	 * the assigned slot index, and vendor/product identifiers.
+	 * This processes pending raw input, refreshes device discovery state, and
+	 * keeps per-slot `GamepadState` values in sync with the latest reports.
 	 */
 	void Poll() override;
+
+	/**
+	 * Return the maximum number of gamepad slots this backend can manage.
+	 *
+	 * @return Maximum supported slot count.
+	 */
 	[[nodiscard]] int GetMaxSlots() const override;
+
+	/**
+	 * Retrieve the current gamepad state for a slot.
+	 *
+	 * @param slot Zero-based slot index.
+	 * @return Reference to the cached `GamepadState` for the requested slot.
+	 */
 	[[nodiscard]] const GamepadState& GetState(int slot) const override;
+
+	/**
+	 * Get the backend name used in the UI and logs.
+	 *
+	 * @return Null-terminated backend name string.
+	 */
 	[[nodiscard]] const char* GetName() const override;
+
+	/**
+	 * Get the human-readable device name for a slot, if available.
+	 *
+	 * @param slot Zero-based slot index.
+	 * @return Device display name, or `nullptr` if unavailable.
+	 */
 	[[nodiscard]] const char* GetSlotDisplayName(int slot) const override;
 
 private:

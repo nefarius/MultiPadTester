@@ -18,36 +18,43 @@ public:
 
 	~DInputBackend() override;
 	void Init(HWND hwnd) override;
+
 	/**
-	 * Poll connected devices and update internal input states.
-	 */
-	 
-	/**
-	 * Maximum number of input slots supported by this backend.
-	 * @returns The maximum slot count.
-	 */
-	
-	/**
-	 * Retrieve the current gamepad state for a given slot.
-	 * @param slot Index of the input slot to query.
-	 * @returns Reference to the `GamepadState` for the specified slot.
-	 */
-	
-	/**
-	 * Name identifying this input backend.
-	 * @returns Pointer to a null-terminated string with the backend name.
-	 */
-	
-	/**
-	 * Human-readable display name for a specific slot.
-	 * @param slot Index of the input slot to query.
-	 * @returns Pointer to a null-terminated string describing the slot or its assigned device.
-	 *          May return nullptr when no slot/device mapping exists or when no name is available.
+	 * Poll connected DirectInput devices and refresh cached gamepad state.
+	 *
+	 * This updates device discovery, handles device loss/reacquisition, and
+	 * stores normalized state per backend slot.
 	 */
 	void Poll() override;
+
+	/**
+	 * Return the maximum number of gamepad slots this backend can manage.
+	 *
+	 * @return Maximum supported slot count.
+	 */
 	[[nodiscard]] int GetMaxSlots() const override;
+
+	/**
+	 * Retrieve the current gamepad state for a slot.
+	 *
+	 * @param slot Zero-based slot index.
+	 * @return Reference to the cached `GamepadState` for the requested slot.
+	 */
 	[[nodiscard]] const GamepadState& GetState(int slot) const override;
+
+	/**
+	 * Get the backend name used in the UI and logs.
+	 *
+	 * @return Null-terminated backend name string.
+	 */
 	[[nodiscard]] const char* GetName() const override;
+
+	/**
+	 * Get the human-readable device name for a slot, if available.
+	 *
+	 * @param slot Zero-based slot index.
+	 * @return Device display name, or `nullptr` if unavailable.
+	 */
 	[[nodiscard]] const char* GetSlotDisplayName(int slot) const override;
 
 	private:
