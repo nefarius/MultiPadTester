@@ -243,7 +243,7 @@ int WgiBackend::GetMaxSlots() const { return kMaxSlots; }
 
 const GamepadState& WgiBackend::GetState(int slot) const
 {
-	static GamepadState const empty{};
+	static constexpr GamepadState empty{};
 	if (slot < 0 || slot >= kMaxSlots)
 		return empty;
 	return impl_->states[slot];
