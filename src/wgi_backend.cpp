@@ -3,6 +3,7 @@
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Gaming.Input.h>
 #include <array>
+#include <cstdint>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -51,6 +52,24 @@ namespace
 		catch (...) {}
 		return "Gamepad " + std::to_string(slotIndex);
 	}
+
+	void GetDeviceIdsForGamepad(Gamepad const& pad, uint16_t* vendorId, uint16_t* productId)
+	{
+		if (!vendorId && !productId) return;
+		try
+		{
+			auto raw = RawGameController::FromGameController(pad);
+			if (raw)
+			{
+				if (vendorId) *vendorId = raw.HardwareVendorId();
+				if (productId) *productId = raw.HardwareProductId();
+				return;
+			}
+		}
+		catch (...) {}
+		if (vendorId) *vendorId = 0;
+		if (productId) *productId = 0;
+	}
 }
 
 struct WgiBackend::Impl
@@ -59,6 +78,8 @@ struct WgiBackend::Impl
 	std::array<std::optional<Gamepad>, kMaxSlots> slotGamepads{};
 	GamepadState states[kMaxSlots]{};
 	std::array<std::string, kMaxSlots> slotDisplayNames;
+	std::array<uint16_t, kMaxSlots> slotVendorIds{};
+	std::array<uint16_t, kMaxSlots> slotProductIds{};
 
 	winrt::event_token addedToken;
 	winrt::event_token removedToken;
@@ -72,6 +93,7 @@ struct WgiBackend::Impl
 			{
 				slotGamepads[i] = pad;
 				slotDisplayNames[i] = GetDisplayNameForGamepad(pad, i);
+				GetDeviceIdsForGamepad(pad, &slotVendorIds[i], &slotProductIds[i]);
 				break;
 			}
 		}
@@ -85,6 +107,8 @@ struct WgiBackend::Impl
 			if (slotGamepads[i] && slotGamepads[i] == pad)
 			{
 				slotGamepads[i].reset();
+				slotVendorIds[i] = 0;
+				slotProductIds[i] = 0;
 				break;
 			}
 		}
@@ -121,6 +145,7 @@ void WgiBackend::Init(HWND)
 			auto pad = gamepads.GetAt(static_cast<uint32_t>(i));
 			impl_->slotGamepads[i] = pad;
 			impl_->slotDisplayNames[i] = GetDisplayNameForGamepad(pad, i);
+			GetDeviceIdsForGamepad(pad, &impl_->slotVendorIds[i], &impl_->slotProductIds[i]);
 		}
 		catch (winrt::hresult_out_of_bounds const&)
 		{
@@ -181,4 +206,19 @@ const char* WgiBackend::GetSlotDisplayName(int slot) const
 	thread_local static std::array<std::string, kMaxSlots> slotResultBuffers;
 	slotResultBuffers[slot] = impl_->slotDisplayNames[slot];
 	return slotResultBuffers[slot].c_str();
+}
+
+void WgiBackend::GetSlotDeviceIds(int slot, uint16_t* vendorId, uint16_t* productId) const
+{
+	if (slot < 0 || slot >= kMaxSlots)
+	{
+		if (vendorId) *vendorId = 0;
+		if (productId) *productId = 0;
+		return;
+	}
+	std::lock_guard lock(impl_->mutex);
+	uint16_t vid = impl_->slotGamepads[slot] ? impl_->slotVendorIds[slot] : 0;
+	uint16_t pid = impl_->slotGamepads[slot] ? impl_->slotProductIds[slot] : 0;
+	if (vendorId) *vendorId = vid;
+	if (productId) *productId = pid;
 }
