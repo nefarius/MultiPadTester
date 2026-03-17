@@ -23,10 +23,9 @@
 #include "dinput_backend.h"
 #include "hidapi_backend.h"
 #include "wgi_backend.h"
-#ifdef USE_GAMEINPUT
 #include "gameinput_backend.h"
-#endif
 #include "gamepad_renderer.h"
+#include "sony_layout.h"
 #include "texture_loader.h"
 #include "resource.h"
 
@@ -382,10 +381,8 @@ int APIENTRY wWinMain(
 	backends.push_back(std::make_unique<DInputBackend>());
 	backends.push_back(std::make_unique<HidApiBackend>());
 	backends.push_back(std::make_unique<WgiBackend>());
-#ifdef USE_GAMEINPUT
 	if (GameInputBackend::IsAvailable())
 		backends.push_back(std::make_unique<GameInputBackend>());
-#endif
 	g_backends = &backends;
 
 	for (auto& b : backends)
@@ -451,9 +448,7 @@ int APIENTRY wWinMain(
 						: (name == DInputBackend::Name)  ? "Legacy API; the oldest available approach; many legacy titles use this."
 						: (name == HidApiBackend::Name)  ? "Very verbose but most universal; many modern engines use this."
 						: (name == WgiBackend::Name)     ? "Windows Runtime gamepad API; Xbox and compatible devices."
-#ifdef USE_GAMEINPUT
 						: (name == GameInputBackend::Name) ? "GDK GameInput; unified controller API, Xbox and HID devices (no Xbox 360)."
-#endif
 						: "";
 					ImGui::TextWrapped("%s", description);
 					ImGui::Spacing();
@@ -464,11 +459,18 @@ int APIENTRY wWinMain(
 						int slotIndex;
 						const char* backendName;
 						const char* displayName;
+						uint16_t vendorId = 0;
+						uint16_t productId = 0;
 					};
 					std::vector<SlotInfo> slots;
 					for (int i = 0; i < b->GetMaxSlots(); ++i)
-						if (b->GetState(i).connected)
-							slots.push_back({&b->GetState(i), i, b->GetName(), b->GetSlotDisplayName(i)});
+					{
+						if (!b->GetState(i).connected)
+							continue;
+						uint16_t vid = 0, pid = 0;
+						b->GetSlotDeviceIds(i, &vid, &pid);
+						slots.push_back({&b->GetState(i), i, b->GetName(), b->GetSlotDisplayName(i), vid, pid});
+					}
 
 					ImDrawList* dl = ImGui::GetWindowDrawList();
 					ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -510,8 +512,10 @@ int APIENTRY wWinMain(
 							           origin.y + row * cellH + pad);
 							ImVec2 size(cellW - pad * 2, cellH - pad * 2);
 
-							const bool sony = isSonyDevice(slots[i].displayName);
-							ImTextureID bodyTex = (sony ? controllerTextureDualSense : controllerTextureXbox).get();
+							const bool sony = (slots[i].vendorId != 0 || slots[i].productId != 0)
+								? IsSonyGamepad(slots[i].vendorId, slots[i].productId)
+								: isSonyDevice(slots[i].displayName);
+							ImTextureID bodyTex = reinterpret_cast<ImTextureID>((sony ? controllerTextureDualSense : controllerTextureXbox).get());
 							GamepadRenderer::LayoutType layoutType = sony ? GamepadRenderer::LayoutType::Sony : GamepadRenderer::LayoutType::Xbox;
 
 							GamepadRenderer::DrawGamepad(dl, pos, size,
