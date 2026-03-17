@@ -50,7 +50,7 @@ namespace
 			}
 		}
 		catch (...) {}
-		return "Gamepad " + std::to_string(slotIndex);
+		return "Gamepad " + std::to_string(slotIndex + 1);
 	}
 
 	void GetDeviceIdsForGamepad(Gamepad const& pad, uint16_t* vendorId, uint16_t* productId)
