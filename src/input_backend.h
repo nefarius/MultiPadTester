@@ -1,5 +1,6 @@
 #pragma once
 #include "gamepad_state.h"
+#include <cstdint>
 #include <Windows.h>
 
 /**
@@ -48,6 +49,13 @@
  * @param slot Index of the input slot.
  * @returns A null-terminated C-string containing the slot display name, or `nullptr` if none is available.
  */
+
+/**
+ * Get USB vendor and product ID for a slot, if available (e.g. for layout selection).
+ * @param slot Index of the input slot.
+ * @param vendorId Output; set to 0 if unknown.
+ * @param productId Output; set to 0 if unknown.
+ */
 class IInputBackend
 {
 public:
@@ -63,4 +71,9 @@ public:
 	[[nodiscard]] virtual const GamepadState& GetState(int slot) const = 0;
 	[[nodiscard]] virtual const char* GetName() const = 0;
 	[[nodiscard]] virtual const char* GetSlotDisplayName([[maybe_unused]] int slot) const { return nullptr; }
+	virtual void GetSlotDeviceIds([[maybe_unused]] int slot, uint16_t* vendorId, uint16_t* productId) const
+	{
+		if (vendorId) *vendorId = 0;
+		if (productId) *productId = 0;
+	}
 };

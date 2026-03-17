@@ -25,6 +25,7 @@
 #include "wgi_backend.h"
 #include "gameinput_backend.h"
 #include "gamepad_renderer.h"
+#include "sony_layout.h"
 #include "texture_loader.h"
 #include "resource.h"
 
@@ -458,11 +459,18 @@ int APIENTRY wWinMain(
 						int slotIndex;
 						const char* backendName;
 						const char* displayName;
+						uint16_t vendorId = 0;
+						uint16_t productId = 0;
 					};
 					std::vector<SlotInfo> slots;
 					for (int i = 0; i < b->GetMaxSlots(); ++i)
-						if (b->GetState(i).connected)
-							slots.push_back({&b->GetState(i), i, b->GetName(), b->GetSlotDisplayName(i)});
+					{
+						if (!b->GetState(i).connected)
+							continue;
+						uint16_t vid = 0, pid = 0;
+						b->GetSlotDeviceIds(i, &vid, &pid);
+						slots.push_back({&b->GetState(i), i, b->GetName(), b->GetSlotDisplayName(i), vid, pid});
+					}
 
 					ImDrawList* dl = ImGui::GetWindowDrawList();
 					ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -504,7 +512,9 @@ int APIENTRY wWinMain(
 							           origin.y + row * cellH + pad);
 							ImVec2 size(cellW - pad * 2, cellH - pad * 2);
 
-							const bool sony = isSonyDevice(slots[i].displayName);
+							const bool sony = (slots[i].vendorId != 0 || slots[i].productId != 0)
+								? IsSonyGamepad(slots[i].vendorId, slots[i].productId)
+								: isSonyDevice(slots[i].displayName);
 							ImTextureID bodyTex = reinterpret_cast<ImTextureID>((sony ? controllerTextureDualSense : controllerTextureXbox).get());
 							GamepadRenderer::LayoutType layoutType = sony ? GamepadRenderer::LayoutType::Sony : GamepadRenderer::LayoutType::Xbox;
 

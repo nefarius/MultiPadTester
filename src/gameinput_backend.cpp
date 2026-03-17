@@ -87,10 +87,10 @@ struct GameInputBackend::Impl
 				const GameInputDeviceInfo* info = infoPtr;
 				vid = info->vendorId;
 				pid = info->productId;
-				// v3: displayName is const char* (UTF-8); often null per documentation
+				// v3: displayName is const char* (UTF-8); often null or generic (e.g. "Wireless Controller")
 				if (info->displayName && info->displayName[0])
 					displayNameStr = info->displayName;
-				// If still generic, use VID/PID so Sony/Xbox names and UI layout (texture) are correct
+				// Use VID/PID-based name only when API left it generic
 				if (displayNameStr.empty() || displayNameStr.find("Controller ") == 0)
 				{
 					if (const char* friendly = GetFriendlyName(vid, pid))
@@ -391,4 +391,19 @@ const char* GameInputBackend::GetSlotDisplayName(int slot) const
 		return nullptr;
 	const std::string& s = impl_->slotDisplayNames[static_cast<size_t>(slot)];
 	return s.empty() ? nullptr : s.c_str();
+}
+
+void GameInputBackend::GetSlotDeviceIds(int slot, uint16_t* vendorId, uint16_t* productId) const
+{
+	if (vendorId) *vendorId = 0;
+	if (productId) *productId = 0;
+	if (slot < 0 || slot >= kMaxDevices)
+		return;
+	std::scoped_lock lock(impl_->mutex);
+	auto it = std::ranges::find_if(impl_->devices, [slot](const Impl::SlotDevice& d) { return d.slot == slot; });
+	if (it != impl_->devices.end())
+	{
+		if (vendorId) *vendorId = it->vendorId;
+		if (productId) *productId = it->productId;
+	}
 }
