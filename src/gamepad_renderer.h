@@ -6,10 +6,7 @@
 namespace GamepadRenderer
 {
 	/**
-	 * Layout for mapping logical gamepad coordinates to screen space.
-	 *
-	 * The layout stores a screen-space origin and per-axis scale factors used to
-	 * convert logical coordinates into pixels for rendering controller artwork.
+	 * Rendering layout type used to choose between Xbox-style and Sony-style controller art.
 	 */
 	enum class LayoutType { Xbox, Sony };
 

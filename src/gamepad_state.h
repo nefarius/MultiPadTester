@@ -2,6 +2,11 @@
 #include <cstdint>
 #include <utility>
 
+/**
+ * Logical gamepad buttons represented as bit flags.
+ *
+ * These values match the bit layout used by `GamepadState::buttons`.
+ */
 enum class Button : uint16_t
 {
 	DPadUp = 0x0001,
@@ -21,6 +26,12 @@ enum class Button : uint16_t
 	Y = 0x8000,
 };
 
+/**
+ * Snapshot of a single gamepad's current state.
+ *
+ * Axis values are normalized to the range shown in the field comments.
+ * Buttons are stored as a bitmask of `Button` values.
+ */
 struct GamepadState
 {
 	bool connected = false;
@@ -32,6 +43,12 @@ struct GamepadState
 	float rightTrigger = 0.0f; //  0 .. 1
 	uint16_t buttons = 0;
 
+	/**
+	 * Check whether a button flag is currently set.
+	 *
+	 * @param b Button flag to test.
+	 * @return true if the button is pressed; otherwise false.
+	 */
 	[[nodiscard]] bool IsPressed(Button b) const
 	{
 		return (buttons & std::to_underlying(b)) != 0;
