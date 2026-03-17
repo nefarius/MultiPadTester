@@ -20,3 +20,4 @@ CMakeUserPresets.json
 *.lib
 *.dll
 *.exp
+/.idea
