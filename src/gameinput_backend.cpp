@@ -211,28 +211,38 @@ GameInputBackend::~GameInputBackend()
 {
 	if (impl_)
 	{
-		std::scoped_lock lock(impl_->mutex);
-		if (impl_->input && impl_->callbackToken)
+		IGameInput* input = nullptr;
+		GameInputCallbackToken token = 0;
+		{
+			std::scoped_lock lock(impl_->mutex);
+			input = impl_->input;
+			token = impl_->callbackToken;
+			impl_->input = nullptr;
+			impl_->callbackToken = 0;
+		}
+		if (input && token)
 		{
 #if defined(GAMEINPUT_API_VERSION) && GAMEINPUT_API_VERSION >= 1
-			impl_->input->UnregisterCallback(impl_->callbackToken);
+			input->UnregisterCallback(token);
 #else
-			impl_->input->UnregisterCallback(impl_->callbackToken, 500000); // 0.5s timeout to allow in-flight DeviceCallback to finish
+			input->UnregisterCallback(token, 500000); // 0.5s timeout to allow in-flight DeviceCallback to finish
 #endif
 		}
-		for (auto& d : impl_->devices)
-			if (d.device)
-				d.device->Release();
-		impl_->devices.clear();
-		if (impl_->dispatcher)
 		{
-			impl_->dispatcher->Release();
-			impl_->dispatcher = nullptr;
-		}
-		if (impl_->input)
-		{
-			impl_->input->Release();
-			impl_->input = nullptr;
+			std::scoped_lock lock(impl_->mutex);
+			for (auto& d : impl_->devices)
+				if (d.device)
+					d.device->Release();
+			impl_->devices.clear();
+			if (impl_->dispatcher)
+			{
+				impl_->dispatcher->Release();
+				impl_->dispatcher = nullptr;
+			}
+			if (input)
+			{
+				input->Release();
+			}
 		}
 	}
 }
