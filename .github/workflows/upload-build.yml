@@ -22,8 +22,16 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $version = if ($tag.StartsWith("v")) { $tag.Substring(1) } else { $tag }
-          vpatch --stamp-version $version --target-file "res\app.rc" --resource.file-version --resource.product-version
+          $semverPattern = '^v?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$'
+          if ($tag -notmatch $semverPattern) {
+            Write-Error "Tag '$tag' does not match semantic version pattern (e.g. v1.2.3 or v1.2.3-rc1). Expected: ^v?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$"
+            exit 1
+          }
+          $major = $Matches[1]
+          $minor = $Matches[2]
+          $patch = $Matches[3]
+          $versionNumeric = "$major.$minor.$patch.0"
+          vpatch --stamp-version $versionNumeric --target-file "res\app.rc" --resource.file-version --resource.product-version
 
       - name: Bootstrap vcpkg
         run: vcpkg/bootstrap-vcpkg.bat
