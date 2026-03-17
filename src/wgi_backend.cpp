@@ -35,6 +35,22 @@ namespace
 		if ((wgi & GamepadButtons::RightThumbstick) != GamepadButtons::None) b |= std::to_underlying(RightThumb);
 		return b;
 	}
+
+	std::string GetDisplayNameForGamepad(Gamepad const& pad, int slotIndex)
+	{
+		try
+		{
+			auto raw = RawGameController::FromGameController(pad);
+			if (raw)
+			{
+				auto name = raw.DisplayName();
+				if (!name.empty())
+					return winrt::to_string(name);
+			}
+		}
+		catch (...) {}
+		return "Gamepad " + std::to_string(slotIndex);
+	}
 }
 
 struct WgiBackend::Impl
@@ -55,7 +71,7 @@ struct WgiBackend::Impl
 			if (!slotGamepads[i])
 			{
 				slotGamepads[i] = pad;
-				slotDisplayNames[i] = "Gamepad " + std::to_string(i);
+				slotDisplayNames[i] = GetDisplayNameForGamepad(pad, i);
 				break;
 			}
 		}
@@ -102,8 +118,9 @@ void WgiBackend::Init(HWND)
 	{
 		try
 		{
-			impl_->slotGamepads[i] = gamepads.GetAt(static_cast<uint32_t>(i));
-			impl_->slotDisplayNames[i] = "Gamepad " + std::to_string(i);
+			auto pad = gamepads.GetAt(static_cast<uint32_t>(i));
+			impl_->slotGamepads[i] = pad;
+			impl_->slotDisplayNames[i] = GetDisplayNameForGamepad(pad, i);
 		}
 		catch (winrt::hresult_out_of_bounds const&)
 		{
@@ -161,7 +178,7 @@ const char* WgiBackend::GetSlotDisplayName(int slot) const
 	if (slot < 0 || slot >= kMaxSlots) return nullptr;
 	std::lock_guard lock(impl_->mutex);
 	if (!impl_->slotGamepads[slot]) return nullptr;
-	thread_local static std::string result;
-	result = impl_->slotDisplayNames[slot];
-	return result.c_str();
+	thread_local static std::array<std::string, kMaxSlots> slotResultBuffers;
+	slotResultBuffers[slot] = impl_->slotDisplayNames[slot];
+	return slotResultBuffers[slot].c_str();
 }
