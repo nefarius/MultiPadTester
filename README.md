@@ -87,7 +87,7 @@ Build output:
 ## License & Legal
 
 - Licensed under the [MIT License](LICENSE).
-- "Windows", "Xbox", and related product names are trademarks of their respective owners.
+- "Windows", "Xbox", "Sony", "DualShock", "DualSense", and related product names are trademarks of their respective owners.
 - Third-party libraries keep their own licenses and terms.
 
 ## Sources & Credits
