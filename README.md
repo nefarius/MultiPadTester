@@ -22,7 +22,7 @@ It polls multiple input APIs in parallel and renders one live gamepad view per d
 ## Limitations / Known Gaps
 
 - Windows only. Linux and macOS are not supported.
-- The GameInput tab is available only when the [GameInput redistributable](https://aka.ms/gameinput) is installed.
+- The GameInput tab is available only when the [GameInput redistributable](https://github.com/microsoftconnect/GameInput/releases) is installed.
 - Backend results are expected to differ by API design (device class support, mapping behavior, and feature exposure).
 - This tool is for input inspection and diagnostics; it does not provide remapping, virtualization, or driver installation.
 
