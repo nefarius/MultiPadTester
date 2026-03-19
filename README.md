@@ -5,69 +5,95 @@
 [![Mastodon Follow](https://img.shields.io/mastodon/follow/109321120351128938?domain=https%3A%2F%2Ffosstodon.org%2F)](https://fosstodon.org/@Nefarius)
 [![Assisted by Cursor AI](https://img.shields.io/badge/Assisted%20by-Cursor%20AI-8B5CF6?style=flat)](https://cursor.com/)
 
-Gamepad/controller tester and visualizer for Windows, supporting multiple input APIs.
-
-## Download
-
-**[Latest build](https://buildbot.nefarius.at/builds/MultiPadTester/latest/MultiPadTester.zip)** &mdash; Pre-built ZIP from the build bot (no build step required).
+Windows gamepad/controller tester and visualizer with side-by-side backend coverage.
 
 ## About
 
-MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries six input backends in parallel and renders a real-time gamepad visualization for every connected controller using [Dear ImGui](https://github.com/ocornut/imgui) and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.
+MultiPad Tester is a self-contained C++23 Win32 desktop tool for inspecting controller input in real time.  
+It polls multiple input APIs in parallel and renders one live gamepad view per detected device using [Dear ImGui](https://github.com/ocornut/imgui) and DirectX 11.
 
 ## Features
 
-- **Multiple input backends** &mdash; XInput, Raw Input, DirectInput, HIDAPI (SetupDi / HID), [Windows.Gaming.Input](https://learn.microsoft.com/en-us/uwp/api/windows.gaming.input) (WGI), and [GameInput](https://learn.microsoft.com/en-us/gaming/gdk/docs/features/common/input/overviews/input-overview) (GDK, via vcpkg) are supported. The GameInput tab is omitted at runtime if the [GameInput redistributable](https://aka.ms/gameinput) is not installed.
-- **Real-time visualization** &mdash; Every connected controller is drawn as an interactive gamepad widget showing buttons, sticks and triggers as they are actuated. Sony (DualSense/DualShock) and Xbox layouts are distinguished for correct mapping and artwork.
-- **Tabbed UI** &mdash; Each backend gets its own tab with a live connected-device count, so you can compare how different APIs see the same hardware.
-- **Self-contained** &mdash; Single Win32 executable; runtime dependencies are the operating system and (for the GameInput tab) the [GameInput redistributable](https://aka.ms/gameinput).
+- Parallel backend tabs for XInput, Raw Input, DirectInput, HIDAPI (SetupDi/HID), [Windows.Gaming.Input](https://learn.microsoft.com/en-us/uwp/api/windows.gaming.input), and [GameInput](https://learn.microsoft.com/en-us/gaming/gdk/docs/features/common/input/overviews/input-overview).
+- Real-time state visualization for buttons, sticks, and triggers per controller.
+- Backend-local device counts to compare API coverage on the same hardware.
+- Persistent UI settings stored in `%APPDATA%\MultiPadTester\config.ini`.
 
-## Configuration
+## Limitations / Known Gaps
 
-Settings are stored in an INI file so they persist across runs. You can change them via the **Preferences** and **About** entries in the window title bar’s system menu (right-click the title bar).
+- Windows only. Linux and macOS are not supported.
+- The GameInput tab is available only when the [GameInput redistributable](https://aka.ms/gameinput) is installed.
+- Backend results are expected to differ by API design (device class support, mapping behavior, and feature exposure).
+- This tool is for input inspection and diagnostics; it does not provide remapping, virtualization, or driver installation.
 
-- **Location** &mdash; `%APPDATA%\MultiPadTester\config.ini` (the folder is created on first run if needed).
-- **Contents** &mdash; Refresh rate (60 / 75 / 120 / 144 Hz or monitor default), VSync on/off, and the last window position and size. If a saved position would place the window on a monitor that no longer exists, the app falls back to the default position on startup.
+## Supported Systems
 
-## How to build
+| Scope | Supported |
+| --- | --- |
+| Operating system | Windows 10 and Windows 11 |
+| Architecture | x64 |
+| Graphics/runtime | DirectX 11-capable Windows desktop environment |
+
+Unsupported targets include non-Windows hosts and ARM builds.
+
+## Installation / Quick Start
+
+1. Download the latest prebuilt archive: **[MultiPadTester.zip](https://buildbot.nefarius.at/builds/MultiPadTester/latest/MultiPadTester.zip)**.
+2. Extract the ZIP to any writable folder.
+3. Run `MultiPadTester.exe`.
+4. If you need the GameInput backend, install the [GameInput redistributable](https://aka.ms/gameinput).
+
+### Configuration
+
+- **Path:** `%APPDATA%\MultiPadTester\config.ini` (created on first launch).
+- **Stored values:** refresh rate, VSync state, and last window position/size.
+
+## Build from Source
 
 ### Prerequisites
 
-- [Visual Studio 2022](https://visualstudio.microsoft.com/) (or newer) with the **Desktop development with C++** workload
-- Windows 10/11 SDK
-- Git (for submodule checkout)
+- [Visual Studio 2022](https://visualstudio.microsoft.com/) with the **Desktop development with C++** workload.
+- Windows 10/11 SDK (as provided by the Visual Studio toolchain setup).
+- Git (for cloning with submodules).
+- CMake (invoked via `cmake --preset ...`).
 
-Dependencies (fetched automatically via vcpkg during configure):
+Dependencies are resolved through the repository's local vcpkg setup during configure (`wil`, `imgui` with Win32/DX11 + docking features, and `gameinput`).
 
-- **[WIL](https://github.com/microsoft/wil)** &mdash; Windows Implementation Libraries (header/utility support)
-- **[Dear ImGui](https://github.com/ocornut/imgui)** &mdash; with docking, DX11 and Win32 bindings
-- **[gameinput](https://vcpkg.io/en/package/gameinput)** &mdash; Microsoft GameInput API (GDK) for the GameInput backend
+### Deterministic Build Steps
 
-### Build steps
-
-Clone the repository with its vcpkg submodule:
-
-```PowerShell
+```powershell
 git clone --recursive https://github.com/nefarius/MultiPadTester.git
 cd MultiPadTester
-```
-
-Bootstrap vcpkg, then configure and build:
-
-```PowerShell
 vcpkg/bootstrap-vcpkg.bat
 cmake --preset default
 cmake --build --preset release
 ```
 
-The resulting binary is at `build/Release/MultiPadTester.exe`.
+Build output:
 
-## Sources & 3rd party credits
+- `build/Release/MultiPadTester.exe` (Release preset)
+- `build/Debug/MultiPadTester.exe` (if built with `cmake --build --preset debug`)
 
-This project benefits from these awesome projects (in no particular order):
+## Support Policy
 
-- [Dear ImGui](https://github.com/ocornut/imgui) &mdash; immediate-mode GUI library used for all rendering
-- [WIL](https://github.com/microsoft/wil) &mdash; Windows Implementation Libraries
-- [vcpkg](https://github.com/microsoft/vcpkg) &mdash; C++ package manager for dependency acquisition
-- [gameinput](https://vcpkg.io/en/package/gameinput) (vcpkg) &mdash; GameInput SDK for the GDK input backend; at runtime the [GameInput redistributable](https://aka.ms/gameinput) must be installed for the GameInput tab to appear
-- [Joystick Input Examples](https://github.com/MysteriousJ/Joystick-Input-Examples?tab=readme-ov-file) &mdash; Code and comprehensive explanations of game controller I/O on PC
+- The issue tracker is for reproducible bugs and actionable feature requests.
+- Usage help and general troubleshooting should go to the community channels first (for example Discord).
+- Reports should include:
+  - Windows version and architecture
+  - Controller model/vendor
+  - Backend tab(s) involved
+  - Reproduction steps and expected vs actual behavior
+
+## License & Legal
+
+- Licensed under the [MIT License](LICENSE).
+- "Windows", "Xbox", and related product names are trademarks of their respective owners.
+- Third-party libraries keep their own licenses and terms.
+
+## Sources & Credits
+
+- [Dear ImGui](https://github.com/ocornut/imgui) - GUI framework used for rendering.
+- [WIL](https://github.com/microsoft/wil) - Windows utility/support library.
+- [vcpkg](https://github.com/microsoft/vcpkg) - dependency acquisition and integration.
+- [gameinput](https://vcpkg.io/en/package/gameinput) - GameInput SDK package used by the GameInput backend.
+- [Joystick Input Examples](https://github.com/MysteriousJ/Joystick-Input-Examples?tab=readme-ov-file) - reference material for controller I/O behavior.
