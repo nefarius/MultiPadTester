@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(MultiPadTester LANGUAGES CXX RC)
 
+# Match vcpkg x64-windows-static (/MT) so CRT and dependency .lib agree.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -44,7 +47,3 @@ target_compile_definitions(MultiPadTester PRIVATE
     NOMINMAX
 )
 
-# Delay-load GameInput.dll so the app starts even when the redist is not installed
-if(MSVC)
-	target_link_options(MultiPadTester PRIVATE /DELAYLOAD:GameInput.dll)
-endif()
