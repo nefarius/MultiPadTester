@@ -3,6 +3,21 @@
 #include <Windows.h>
 #include <winioctl.h>
 
+/**
+ * @brief Probe the HidHide driver and report whether it is installed and active.
+ *
+ * Queries the HidHide device interface ("\\.\HidHide") using an IOCTL to determine
+ * if the driver is present and currently active. Maps device-open and IOCTL outcomes
+ * to a `HidHideStatus` value.
+ *
+ * @return HidHideStatus One of:
+ * - `HidHideStatus::NotInstalled` if the device path does not exist.
+ * - `HidHideStatus::AccessDenied` if opening the device was denied.
+ * - `HidHideStatus::QueryFailed` if opening the device or issuing the IOCTL failed
+ *   for any other reason or returned an unexpected byte count.
+ * - `HidHideStatus::InstalledActive` if the driver is installed and reports active.
+ * - `HidHideStatus::InstalledInactive` if the driver is installed and reports inactive.
+ */
 HidHideStatus GetHidHideStatus()
 {
 	// Matches HidHideCLI constants from official HidHide source.

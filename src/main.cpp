@@ -279,15 +279,15 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 }
 
 /**
- * @brief Application entry point that initializes subsystems, runs the main event and render loop, and performs cleanup on exit.
+ * @brief Initialize application subsystems, run the main event/render loop, and perform shutdown.
  *
- * Initializes DPI awareness, registers the main window class, loads persisted preferences, creates the main window and Direct3D/ImGui backends, constructs input backends, and enters the primary message/poll/render loop that drives UI and input visualization. On exit it shuts down ImGui and Direct3D, saves state as needed, and unregisters the window class.
+ * Sets up DPI awareness, the main window, Direct3D and ImGui backends, and input backends; enters the primary message/poll/render loop that drives the UI and controller visualizations; on exit shuts down ImGui and Direct3D, saves persistent preferences, and unregisters the window class.
  *
  * @param hInstance Handle to the current application instance.
  * @param hPrevInstance Reserved; typically unused.
  * @param lpCmdLine Command line for the application as a Unicode string.
  * @param nCmdShow Controls how the window is to be shown.
- * @return int `0` on normal exit, non-zero on initialization failure (e.g., Direct3D creation failure).
+ * @return int `0` on normal exit, non-zero on initialization failure (for example, Direct3D creation failure).
  */
 int APIENTRY wWinMain(
 	_In_ HINSTANCE hInstance,
