@@ -352,8 +352,8 @@ LibwdiUsbProbeResult ProbeLibwdiUsbDevices()
 		SetupDiDestroyDeviceInfoList(devInfoSet);
 	}
 
-	std::sort(found.begin(), found.end());
-	found.erase(std::unique(found.begin(), found.end()), found.end());
+	std::ranges::sort(found);
+	found.erase(std::ranges::unique(found).begin(), found.end());
 	result.instanceIds = std::move(found);
 	result.succeeded = true;
 	result.errorMessage.clear();
