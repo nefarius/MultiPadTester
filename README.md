@@ -25,7 +25,7 @@ It polls multiple input APIs in parallel and renders one live gamepad view per d
 - Windows only. Linux and macOS are not supported.
 - The GameInput tab is available only when the [GameInput redistributable](https://github.com/microsoftconnect/GameInput/releases) is installed.
 - On startup, MultiPad Tester checks for HidHide. If HidHide is currently enabled, the app shows a warning because hidden devices can make the results less accurate. If another HidHide app is already open, you may see a different warning asking you to close those apps and restart MultiPad Tester for the best results.
-- If any device in setup class **USBDevice** (“Universal Serial Bus devices”) has `Provider` **libwdi**, or any device in **libusbK devices** (`{ecfb0cfd-74c4-4f52-bbf7-343461cd72ac}`) has `Provider` **libusbK** (Zadig installs), the app shows a warning listing those device instance IDs. Those devices are not discoverable through normal gamepad APIs until the original driver stack is restored.
+- If any device matches **USBDevice** + `Provider` **libwdi**, **libusbK devices** (`{ecfb0cfd-74c4-4f52-bbf7-343461cd72ac}`) + **libusbk**, or **libusb-win32 devices** (`{eb781aaf-9c70-4523-a5df-642a87eca567}`) + **libusb-win32** (typical Zadig installs), the app shows a warning listing those device instance IDs. Those devices are not discoverable through normal gamepad APIs until the original driver stack is restored.
 - Backend results are expected to differ by API design (device class support, mapping behavior, and feature exposure).
 - This tool is for input inspection and diagnostics; it does not provide remapping, virtualization, or driver installation.
 

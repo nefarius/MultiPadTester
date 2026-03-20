@@ -743,7 +743,7 @@ int APIENTRY wWinMain(
 		}
 
 		// True modal: OpenPopup + BeginPopupModal (ImGuiWindowFlags_Modal on Begin is not a real modal stack)
-		const char* const kLibwdiUsbPopupId = "Zadig / libwdi / libusbK driver detected";
+		const char* const kLibwdiUsbPopupId = "Zadig / libwdi / libusbK / libusb-win32 driver detected";
 		if (g_showLibwdiUsbWarning)
 			ImGui::OpenPopup(kLibwdiUsbPopupId);
 
@@ -765,7 +765,7 @@ int APIENTRY wWinMain(
 			if (!g_libwdiUsbProbeErrorUtf8.empty())
 			{
 				ImGui::TextWrapped(
-					"MultiPad Tester could not enumerate USBDevice / libusbK devices setup classes to check for Zadig drivers (Provider libwdi vs libusbK per class).");
+					"MultiPad Tester could not enumerate USBDevice / libusbK / libusb-win32 devices setup classes to check for Zadig drivers (expected Provider per class).");
 				ImGui::Spacing();
 				ImGui::TextUnformatted("Details:");
 				ImGui::Spacing();
@@ -776,7 +776,7 @@ int APIENTRY wWinMain(
 			else
 			{
 				ImGui::TextWrapped(
-					"At least one matching device was found: USBDevice class with Provider libwdi, or libusbK devices class with Provider libusbK (Zadig).");
+					"At least one matching device was found: USBDevice + libwdi, libusbK devices + libusbk, or libusb-win32 devices + libusb-win32 (Zadig).");
 				ImGui::Spacing();
 				ImGui::TextWrapped(
 					"Those devices are not discoverable by MultiPad Tester through normal gamepad/HID APIs. To have affected controllers detected again, undo the driver replacement in Device Manager (or restore the original driver stack) for those devices.");

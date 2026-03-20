@@ -56,6 +56,10 @@ namespace
 	const GUID kGuidDevClassLibusbKDevices = {
 		0xecfb0cfd, 0x74c4, 0x4f52, {0xbb, 0xf7, 0x34, 0x34, 0x61, 0xcd, 0x72, 0xac}};
 
+	// "libusb-win32 devices"
+	const GUID kGuidDevClassLibusbWin32Devices = {
+		0xeb781aaf, 0x9c70, 0x4523, {0xa5, 0xdf, 0x64, 0x2a, 0x87, 0xec, 0xa5, 0x67}};
+
 	void TrimInPlace(std::wstring& s)
 	{
 		while (!s.empty() && std::iswspace(static_cast<wint_t>(s.front())))
@@ -64,17 +68,24 @@ namespace
 			s.pop_back();
 	}
 
-	/**
-	 * USBDevice class: expect Provider libwdi (WinUSB via Zadig).
-	 * libusbK devices class: expect Provider libusbK. Do not accept the other provider on a class.
-	 */
-	bool ProviderMatchesSetupClass(std::wstring provider, const bool isUsbDeviceClass)
+	/** Each setup class has exactly one expected Provider string (case-insensitive). */
+	bool ProviderMatchesExpected(std::wstring provider, const wchar_t* expectedProvider)
 	{
 		TrimInPlace(provider);
-		if (isUsbDeviceClass)
-			return _wcsicmp(provider.c_str(), L"libwdi") == 0;
-		return _wcsicmp(provider.c_str(), L"libusbk") == 0;
+		return _wcsicmp(provider.c_str(), expectedProvider) == 0;
 	}
+
+	struct ZadigUsbSetupClassEntry
+	{
+		GUID classGuid;
+		const wchar_t* expectedProvider;
+	};
+
+	static const ZadigUsbSetupClassEntry kZadigUsbSetupClasses[] = {
+		{kGuidDevClassUsbDevice, L"libwdi"},
+		{kGuidDevClassLibusbKDevices, L"libusbk"},
+		{kGuidDevClassLibusbWin32Devices, L"libusb-win32"},
+	};
 
 	bool ReadProviderString(
 		HDEVINFO devInfoSet,
@@ -302,17 +313,12 @@ LibwdiUsbProbeResult ProbeLibwdiUsbDevices()
 {
 	LibwdiUsbProbeResult result;
 
-	static const GUID kSetupClassesToScan[] = {
-		kGuidDevClassUsbDevice,
-		kGuidDevClassLibusbKDevices,
-	};
-
 	std::vector<std::wstring> found;
 
-	for (const GUID& classGuid : kSetupClassesToScan)
+	for (const auto& entry : kZadigUsbSetupClasses)
 	{
 		HDEVINFO devInfoSet = SetupDiGetClassDevsW(
-			&classGuid,
+			&entry.classGuid,
 			nullptr,
 			nullptr,
 			DIGCF_PRESENT);
@@ -326,14 +332,12 @@ LibwdiUsbProbeResult ProbeLibwdiUsbDevices()
 		SP_DEVINFO_DATA devInfoData{};
 		devInfoData.cbSize = sizeof(devInfoData);
 
-		const bool isUsbDeviceClass = IsEqualGUID(classGuid, kGuidDevClassUsbDevice) != FALSE;
-
 		for (DWORD index = 0; SetupDiEnumDeviceInfo(devInfoSet, index, &devInfoData); ++index)
 		{
 			std::wstring provider;
 			if (!ReadProviderString(devInfoSet, devInfoData, provider))
 				continue;
-			if (!ProviderMatchesSetupClass(provider, isUsbDeviceClass))
+			if (!ProviderMatchesExpected(provider, entry.expectedProvider))
 				continue;
 			if (!IsTargetController(devInfoSet, devInfoData))
 				continue;
