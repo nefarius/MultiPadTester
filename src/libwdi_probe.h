@@ -4,7 +4,7 @@
 #include <vector>
 
 /**
- * @brief Result of scanning for USBDevice-class devices whose driver Provider is libwdi (Zadig).
+ * @brief Result of scanning USBDevice (Provider libwdi) and libusbK devices (Provider libusbK) setup classes (Zadig).
  */
 struct LibwdiUsbProbeResult
 {
@@ -17,7 +17,7 @@ struct LibwdiUsbProbeResult
 };
 
 /**
- * @brief Enumerate present devices in setup class USBDevice and collect those with Provider "libwdi".
+ * @brief Enumerate USBDevice (libwdi only) and libusbK devices (libusbK only); class and provider are not mixed.
  *
  * Uses DEVPKEY_Device_DriverProvider via SetupAPI.
  */

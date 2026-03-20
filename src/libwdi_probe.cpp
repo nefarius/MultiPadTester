@@ -52,6 +52,10 @@ namespace
 	const GUID kGuidDevClassUsbDevice = {
 		0x88bae032, 0x5a81, 0x49f0, {0xbc, 0x3d, 0xa4, 0xff, 0x13, 0x82, 0x16, 0xd6}};
 
+	// "libusbK devices" — libusbK-class devices (e.g. per-interface installs, "Wireless Controller (Interface N)").
+	const GUID kGuidDevClassLibusbKDevices = {
+		0xecfb0cfd, 0x74c4, 0x4f52, {0xbb, 0xf7, 0x34, 0x34, 0x61, 0xcd, 0x72, 0xac}};
+
 	void TrimInPlace(std::wstring& s)
 	{
 		while (!s.empty() && std::iswspace(static_cast<wint_t>(s.front())))
@@ -60,10 +64,16 @@ namespace
 			s.pop_back();
 	}
 
-	bool IsLibwdiProvider(std::wstring provider)
+	/**
+	 * USBDevice class: expect Provider libwdi (WinUSB via Zadig).
+	 * libusbK devices class: expect Provider libusbK. Do not accept the other provider on a class.
+	 */
+	bool ProviderMatchesSetupClass(std::wstring provider, const bool isUsbDeviceClass)
 	{
 		TrimInPlace(provider);
-		return _wcsicmp(provider.c_str(), L"libwdi") == 0;
+		if (isUsbDeviceClass)
+			return _wcsicmp(provider.c_str(), L"libwdi") == 0;
+		return _wcsicmp(provider.c_str(), L"libusbk") == 0;
 	}
 
 	bool ReadProviderString(
@@ -292,41 +302,55 @@ LibwdiUsbProbeResult ProbeLibwdiUsbDevices()
 {
 	LibwdiUsbProbeResult result;
 
-	HDEVINFO devInfoSet = SetupDiGetClassDevsW(
-		&kGuidDevClassUsbDevice,
-		nullptr,
-		nullptr,
-		DIGCF_PRESENT);
-	if (devInfoSet == INVALID_HANDLE_VALUE)
+	static const GUID kSetupClassesToScan[] = {
+		kGuidDevClassUsbDevice,
+		kGuidDevClassLibusbKDevices,
+	};
+
+	std::vector<std::wstring> found;
+
+	for (const GUID& classGuid : kSetupClassesToScan)
 	{
-		result.succeeded = false;
-		result.errorMessage = FormatProbeFailure(L"SetupDiGetClassDevsW failed", GetLastError());
-		return result;
+		HDEVINFO devInfoSet = SetupDiGetClassDevsW(
+			&classGuid,
+			nullptr,
+			nullptr,
+			DIGCF_PRESENT);
+		if (devInfoSet == INVALID_HANDLE_VALUE)
+		{
+			result.succeeded = false;
+			result.errorMessage = FormatProbeFailure(L"SetupDiGetClassDevsW failed", GetLastError());
+			return result;
+		}
+
+		SP_DEVINFO_DATA devInfoData{};
+		devInfoData.cbSize = sizeof(devInfoData);
+
+		const bool isUsbDeviceClass = IsEqualGUID(classGuid, kGuidDevClassUsbDevice) != FALSE;
+
+		for (DWORD index = 0; SetupDiEnumDeviceInfo(devInfoSet, index, &devInfoData); ++index)
+		{
+			std::wstring provider;
+			if (!ReadProviderString(devInfoSet, devInfoData, provider))
+				continue;
+			if (!ProviderMatchesSetupClass(provider, isUsbDeviceClass))
+				continue;
+			if (!IsTargetController(devInfoSet, devInfoData))
+				continue;
+
+			wchar_t instanceId[MAX_DEVICE_ID_LEN]{};
+			if (!SetupDiGetDeviceInstanceIdW(devInfoSet, &devInfoData, instanceId, MAX_DEVICE_ID_LEN, nullptr))
+				continue;
+
+			found.emplace_back(instanceId);
+		}
+
+		SetupDiDestroyDeviceInfoList(devInfoSet);
 	}
 
-	SP_DEVINFO_DATA devInfoData{};
-	devInfoData.cbSize = sizeof(devInfoData);
-
-	for (DWORD index = 0; SetupDiEnumDeviceInfo(devInfoSet, index, &devInfoData); ++index)
-	{
-		std::wstring provider;
-		if (!ReadProviderString(devInfoSet, devInfoData, provider))
-			continue;
-		if (!IsLibwdiProvider(provider))
-			continue;
-		if (!IsTargetController(devInfoSet, devInfoData))
-			continue;
-
-		wchar_t instanceId[MAX_DEVICE_ID_LEN]{};
-		if (!SetupDiGetDeviceInstanceIdW(devInfoSet, &devInfoData, instanceId, MAX_DEVICE_ID_LEN, nullptr))
-			continue;
-
-		result.instanceIds.emplace_back(instanceId);
-	}
-
-	SetupDiDestroyDeviceInfoList(devInfoSet);
-
-	std::sort(result.instanceIds.begin(), result.instanceIds.end());
+	std::sort(found.begin(), found.end());
+	found.erase(std::unique(found.begin(), found.end()), found.end());
+	result.instanceIds = std::move(found);
 	result.succeeded = true;
 	result.errorMessage.clear();
 	return result;

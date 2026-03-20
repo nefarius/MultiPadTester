@@ -227,7 +227,7 @@ static bool g_showHidHideWarning = false;
 static bool g_showHidHideBlockedWarning = false;
 static bool g_showLibwdiUsbWarning = false;
 static std::vector<std::string> g_libwdiUsbInstanceIdsUtf8;
-/** Non-empty if the libwdi USB probe failed (enumeration error); instance ID list is not used in that case. */
+/** Non-empty if the Zadig USB driver probe failed (enumeration error); instance ID list is not used in that case. */
 static std::string g_libwdiUsbProbeErrorUtf8;
 static AppPrefs g_prefs;
 
@@ -743,7 +743,7 @@ int APIENTRY wWinMain(
 		}
 
 		// True modal: OpenPopup + BeginPopupModal (ImGuiWindowFlags_Modal on Begin is not a real modal stack)
-		const char* const kLibwdiUsbPopupId = "Zadig / libwdi driver detected";
+		const char* const kLibwdiUsbPopupId = "Zadig / libwdi / libusbK driver detected";
 		if (g_showLibwdiUsbWarning)
 			ImGui::OpenPopup(kLibwdiUsbPopupId);
 
@@ -765,7 +765,7 @@ int APIENTRY wWinMain(
 			if (!g_libwdiUsbProbeErrorUtf8.empty())
 			{
 				ImGui::TextWrapped(
-					"MultiPad Tester could not enumerate USBDevice-class devices to check for Zadig / libwdi drivers.");
+					"MultiPad Tester could not enumerate USBDevice / libusbK devices setup classes to check for Zadig drivers (Provider libwdi vs libusbK per class).");
 				ImGui::Spacing();
 				ImGui::TextUnformatted("Details:");
 				ImGui::Spacing();
@@ -776,7 +776,7 @@ int APIENTRY wWinMain(
 			else
 			{
 				ImGui::TextWrapped(
-					"At least one device in the \"Universal Serial Bus devices\" (USBDevice) class is using a driver installed by Zadig / libwdi (Provider: libwdi).");
+					"At least one matching device was found: USBDevice class with Provider libwdi, or libusbK devices class with Provider libusbK (Zadig).");
 				ImGui::Spacing();
 				ImGui::TextWrapped(
 					"Those devices are not discoverable by MultiPad Tester through normal gamepad/HID APIs. To have affected controllers detected again, undo the driver replacement in Device Manager (or restore the original driver stack) for those devices.");
