@@ -326,7 +326,7 @@ int APIENTRY wWinMain(
 	_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE,
 	_In_ LPWSTR,
-	_In_ int)
+	_In_ int nCmdShow)
 {
 	ImGui_ImplWin32_EnableDpiAwareness();
 
@@ -369,9 +369,6 @@ int APIENTRY wWinMain(
 		UnregisterClass(wc.lpszClassName, wc.hInstance);
 		return 1;
 	}
-
-	ShowWindow(hwnd, SW_SHOWDEFAULT);
-	UpdateWindow(hwnd);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -457,6 +454,9 @@ int APIENTRY wWinMain(
 
 	for (auto& b : backends)
 		b->Init(hwnd);
+
+	ShowWindow(hwnd, nCmdShow);
+	UpdateWindow(hwnd);
 
 	constexpr float clearColor[4] = {0.06f, 0.06f, 0.07f, 1.0f};
 
