@@ -23,7 +23,7 @@ HidHideStatus GetHidHideStatus()
 		const DWORD err = GetLastError();
 		if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
 			return HidHideStatus::NotInstalled;
-		if (err == ERROR_ACCESS_DENIED)
+		if (err == ERROR_ACCESS_DENIED || err == ERROR_SHARING_VIOLATION)
 			return HidHideStatus::AccessDenied;
 		return HidHideStatus::QueryFailed;
 	}
