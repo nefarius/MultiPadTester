@@ -24,6 +24,7 @@ It polls multiple input APIs in parallel and renders one live gamepad view per d
 
 - Windows only. Linux and macOS are not supported.
 - The GameInput tab is available only when the [GameInput redistributable](https://github.com/microsoftconnect/GameInput/releases) is installed.
+- On startup, MultiPad Tester checks for HidHide. If HidHide is currently enabled, the app shows a warning because hidden devices can make the results less accurate. If another HidHide app is already open, you may see a different warning asking you to close those apps and restart MultiPad Tester for the best results.
 - Backend results are expected to differ by API design (device class support, mapping behavior, and feature exposure).
 - This tool is for input inspection and diagnostics; it does not provide remapping, virtualization, or driver installation.
 

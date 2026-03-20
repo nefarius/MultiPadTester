@@ -27,6 +27,7 @@
 #include "gamepad_renderer.h"
 #include "sony_layout.h"
 #include "texture_loader.h"
+#include "hidhide_probe.h"
 #include "resource.h"
 
 #define IDM_ABOUT 0xF200
@@ -221,6 +222,8 @@ static D3DContext g_d3d;
 static std::vector<std::unique_ptr<IInputBackend>>* g_backends = nullptr;
 static bool g_showAbout = false;
 static bool g_showPreferences = false;
+static bool g_showHidHideWarning = false;
+static bool g_showHidHideBlockedWarning = false;
 static AppPrefs g_prefs;
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
@@ -276,15 +279,15 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 }
 
 /**
- * @brief Application entry point that initializes subsystems, runs the main event and render loop, and performs cleanup on exit.
+ * @brief Initialize application subsystems, run the main event/render loop, and perform shutdown.
  *
- * Initializes DPI awareness, registers the main window class, loads persisted preferences, creates the main window and Direct3D/ImGui backends, constructs input backends, and enters the primary message/poll/render loop that drives UI and input visualization. On exit it shuts down ImGui and Direct3D, saves state as needed, and unregisters the window class.
+ * Sets up DPI awareness, the main window, Direct3D and ImGui backends, and input backends; enters the primary message/poll/render loop that drives the UI and controller visualizations; on exit shuts down ImGui and Direct3D, saves persistent preferences, and unregisters the window class.
  *
  * @param hInstance Handle to the current application instance.
  * @param hPrevInstance Reserved; typically unused.
  * @param lpCmdLine Command line for the application as a Unicode string.
  * @param nCmdShow Controls how the window is to be shown.
- * @return int `0` on normal exit, non-zero on initialization failure (e.g., Direct3D creation failure).
+ * @return int `0` on normal exit, non-zero on initialization failure (for example, Direct3D creation failure).
  */
 int APIENTRY wWinMain(
 	_In_ HINSTANCE hInstance,
@@ -357,6 +360,17 @@ int APIENTRY wWinMain(
 
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_d3d.device.get(), g_d3d.deviceCtx.get());
+	switch (GetHidHideStatus())
+	{
+	case HidHideStatus::InstalledActive:
+		g_showHidHideWarning = true;
+		break;
+	case HidHideStatus::AccessDenied:
+		g_showHidHideBlockedWarning = true;
+		break;
+	default:
+		break;
+	}
 
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureXbox;
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureDualSense;
@@ -602,6 +616,52 @@ int APIENTRY wWinMain(
 				ImGui::SameLine();
 				if (ImGui::Button("Cancel", ImVec2(80, 0)))
 					g_showPreferences = false;
+			}
+			ImGui::End();
+		}
+
+		if (g_showHidHideWarning)
+		{
+			const float warningMinW = 460.f, warningMinH = 170.f;
+			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
+			                                    ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::Begin("HidHide Active Warning", &g_showHidHideWarning,
+			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
+			                     ImGuiWindowFlags_NoResize))
+			{
+				ImGui::TextWrapped("HidHide is installed and currently active on this system.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("When active, HidHide can hide physical controllers from applications and may skew MultiPad Tester detection and backend comparison results.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("For most accurate results, disable device hiding in HidHide or uninstall HidHide before testing.");
+				ImGui::Spacing();
+				if (ImGui::Button("OK", ImVec2(100, 0)))
+					g_showHidHideWarning = false;
+			}
+			ImGui::End();
+		}
+
+		if (g_showHidHideBlockedWarning)
+		{
+			const float warningMinW = 500.f, warningMinH = 190.f;
+			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
+			                                    ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::Begin("HidHide Interface Blocked", &g_showHidHideBlockedWarning,
+			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
+			                     ImGuiWindowFlags_NoResize))
+			{
+				ImGui::TextWrapped("HidHide appears to be installed, but its control interface is currently blocked by another process.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("HidHide enforces exclusive handle access, so MultiPad Tester could not accurately query whether device hiding is active.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("For accurate probing and results, close all other applications that may use HidHide (for example the HidHide configuration client) and restart MultiPad Tester.");
+				ImGui::Spacing();
+				if (ImGui::Button("OK", ImVec2(100, 0)))
+					g_showHidHideBlockedWarning = false;
 			}
 			ImGui::End();
 		}
