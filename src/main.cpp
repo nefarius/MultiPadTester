@@ -603,77 +603,95 @@ int APIENTRY wWinMain(
 
 		ImGui::End();
 
+		const char* const kAboutPopupId = "About MultiPad Tester";
 		if (g_showAbout)
+			ImGui::OpenPopup(kAboutPopupId);
+
+		const bool aboutPopupActive =
+			g_showAbout || ImGui::IsPopupOpen(kAboutPopupId, ImGuiPopupFlags_None);
+		if (aboutPopupActive)
 		{
 			const float aboutMinW = 320.f, aboutMinH = 100.f;
 			ImGui::SetNextWindowSizeConstraints(ImVec2(aboutMinW, aboutMinH),
-			                                   ImVec2(FLT_MAX, FLT_MAX));
+			                                    ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
-			                       ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::Begin("About MultiPad Tester", &g_showAbout,
-			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
-			                     ImGuiWindowFlags_NoResize))
-			{
-				ImGui::Text("MultiPad Tester");
-				ImGui::TextWrapped("Gamepad/controller tester and visualizer for Windows, supporting multiple input APIs.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries four different input backends in parallel and renders a real-time gamepad visualization for every connected controller using Dear ImGui and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.");
-				ImGui::Spacing();
-				ImGui::Text("Copyright (c) 2026 Benjamin Höglinger-Stelzer");
-				ImGui::Spacing();
-				if (ImGui::Button("Open GitHub repository"))
-					ShellExecuteW(nullptr, L"open", L"https://github.com/nefarius/MultiPadTester",
-					             nullptr, nullptr, SW_SHOWNORMAL);
-			}
-			ImGui::End();
+			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		}
+		if (ImGui::BeginPopupModal(
+			    kAboutPopupId,
+			    &g_showAbout,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			ImGui::Text("MultiPad Tester");
+			ImGui::TextWrapped("Gamepad/controller tester and visualizer for Windows, supporting multiple input APIs.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries four different input backends in parallel and renders a real-time gamepad visualization for every connected controller using Dear ImGui and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.");
+			ImGui::Spacing();
+			ImGui::Text("Copyright (c) 2026 Benjamin Höglinger-Stelzer");
+			ImGui::Spacing();
+			if (ImGui::Button("Open GitHub repository"))
+				ShellExecuteW(nullptr, L"open", L"https://github.com/nefarius/MultiPadTester",
+				              nullptr, nullptr, SW_SHOWNORMAL);
+			ImGui::EndPopup();
 		}
 
+		const char* const kPreferencesPopupId = "Preferences";
 		if (g_showPreferences)
+			ImGui::OpenPopup(kPreferencesPopupId);
+
+		const bool preferencesPopupActive =
+			g_showPreferences || ImGui::IsPopupOpen(kPreferencesPopupId, ImGuiPopupFlags_None);
+		if (preferencesPopupActive)
 		{
 			const float prefsMinW = 320.f, prefsMinH = 120.f;
 			ImGui::SetNextWindowSizeConstraints(ImVec2(prefsMinW, prefsMinH),
 			                                    ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
-			                       ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::Begin("Preferences", &g_showPreferences,
-			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
-			                     ImGuiWindowFlags_NoResize))
+			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		}
+		if (ImGui::BeginPopupModal(
+			    kPreferencesPopupId,
+			    &g_showPreferences,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			static int editRefreshRate = 60;
+			static bool editVsync = true;
+			if (ImGui::IsWindowAppearing())
 			{
-				static int editRefreshRate = 60;
-				static bool editVsync = true;
-				if (ImGui::IsWindowAppearing())
-				{
-					editRefreshRate = g_prefs.refreshRate;
-					editVsync = g_prefs.vsync;
-				}
-				int monitorNum = 60, monitorDen = 1;
-				GetMonitorRefreshRate(hwnd, monitorNum, monitorDen);
-				static std::string monitorDefaultLabel;
-				monitorDefaultLabel = std::format("Monitor default ({} Hz)", monitorNum);
-				const char* refreshItems[] = {monitorDefaultLabel.c_str(), "60 Hz", "75 Hz", "120 Hz", "144 Hz"};
-				int idx = (editRefreshRate == 0 ? 0 : editRefreshRate == 60 ? 1 : editRefreshRate == 75 ? 2 : editRefreshRate == 120 ? 3 : 4);
-				if (ImGui::Combo("Refresh rate", &idx, refreshItems, 5))
-					editRefreshRate = (idx == 0 ? 0 : idx == 1 ? 60 : idx == 2 ? 75 : idx == 3 ? 120 : 144);
-				ImGui::Checkbox("VSync", &editVsync);
-				ImGui::Spacing();
-				if (ImGui::Button("OK", ImVec2(80, 0)))
-				{
-					int num = 60, den = 1;
-					if (editRefreshRate == 0)
-						GetMonitorRefreshRate(hwnd, num, den);
-					else
-						num = editRefreshRate;
-					g_d3d.SetRefreshRate(num, den);
-					g_prefs.refreshRate = editRefreshRate;
-					g_prefs.vsync = editVsync;
-					SaveConfig(g_prefs);
-					g_showPreferences = false;
-				}
-				ImGui::SameLine();
-				if (ImGui::Button("Cancel", ImVec2(80, 0)))
-					g_showPreferences = false;
+				editRefreshRate = g_prefs.refreshRate;
+				editVsync = g_prefs.vsync;
 			}
-			ImGui::End();
+			int monitorNum = 60, monitorDen = 1;
+			GetMonitorRefreshRate(hwnd, monitorNum, monitorDen);
+			static std::string monitorDefaultLabel;
+			monitorDefaultLabel = std::format("Monitor default ({} Hz)", monitorNum);
+			const char* refreshItems[] = {monitorDefaultLabel.c_str(), "60 Hz", "75 Hz", "120 Hz", "144 Hz"};
+			int idx = (editRefreshRate == 0 ? 0 : editRefreshRate == 60 ? 1 : editRefreshRate == 75 ? 2 : editRefreshRate == 120 ? 3 : 4);
+			if (ImGui::Combo("Refresh rate", &idx, refreshItems, 5))
+				editRefreshRate = (idx == 0 ? 0 : idx == 1 ? 60 : idx == 2 ? 75 : idx == 3 ? 120 : 144);
+			ImGui::Checkbox("VSync", &editVsync);
+			ImGui::Spacing();
+			if (ImGui::Button("OK", ImVec2(80, 0)))
+			{
+				int num = 60, den = 1;
+				if (editRefreshRate == 0)
+					GetMonitorRefreshRate(hwnd, num, den);
+				else
+					num = editRefreshRate;
+				g_d3d.SetRefreshRate(num, den);
+				g_prefs.refreshRate = editRefreshRate;
+				g_prefs.vsync = editVsync;
+				SaveConfig(g_prefs);
+				ImGui::CloseCurrentPopup();
+				g_showPreferences = false;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(80, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+				g_showPreferences = false;
+			}
+			ImGui::EndPopup();
 		}
 
 		const char* const kHidHideActivePopupId = "HidHide Active Warning";
