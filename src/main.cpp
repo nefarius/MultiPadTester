@@ -709,45 +709,56 @@ int APIENTRY wWinMain(
 			ImGui::End();
 		}
 
+		// True modal: OpenPopup + BeginPopupModal (ImGuiWindowFlags_Modal on Begin is not a real modal stack)
+		const char* const kLibwdiUsbPopupId = "Zadig / libwdi driver detected";
 		if (g_showLibwdiUsbWarning)
+			ImGui::OpenPopup(kLibwdiUsbPopupId);
+
+		const bool libwdiPopupActive =
+			g_showLibwdiUsbWarning || ImGui::IsPopupOpen(kLibwdiUsbPopupId, ImGuiPopupFlags_None);
+		if (libwdiPopupActive)
 		{
 			const float warningMinW = 520.f, warningMinH = 240.f;
 			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
 			                                    ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
 			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::Begin("Zadig / libwdi driver detected", &g_showLibwdiUsbWarning,
-			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
-			                     ImGuiWindowFlags_NoResize))
+		}
+		if (ImGui::BeginPopupModal(
+			    kLibwdiUsbPopupId,
+			    &g_showLibwdiUsbWarning,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			ImGui::TextWrapped(
+				"At least one device in the \"Universal Serial Bus devices\" (USBDevice) class is using a driver installed by Zadig / libwdi (Provider: libwdi).");
+			ImGui::Spacing();
+			ImGui::TextWrapped(
+				"Those devices are not discoverable by MultiPad Tester through normal gamepad/HID APIs. To have affected controllers detected again, undo the driver replacement in Device Manager (or restore the original driver stack) for those devices.");
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::TextUnformatted("Affected device instance IDs:");
+			const float listH = ImGui::GetTextLineHeightWithSpacing() * 8.0f + 8.0f;
+			ImGui::BeginChild(
+				"##LibwdiInstanceIds",
+				ImVec2(0.0f, listH),
+				true,
+				ImGuiWindowFlags_HorizontalScrollbar);
+			for (int i = 0; i < static_cast<int>(g_libwdiUsbInstanceIdsUtf8.size()); ++i)
 			{
-				ImGui::TextWrapped(
-					"At least one device in the \"Universal Serial Bus devices\" (USBDevice) class is using a driver installed by Zadig / libwdi (Provider: libwdi).");
-				ImGui::Spacing();
-				ImGui::TextWrapped(
-					"Those devices are not discoverable by MultiPad Tester through normal gamepad/HID APIs. To have affected controllers detected again, undo the driver replacement in Device Manager (or restore the original driver stack) for those devices.");
-				ImGui::Spacing();
-				ImGui::Separator();
-				ImGui::TextUnformatted("Affected device instance IDs:");
-				const float listH = ImGui::GetTextLineHeightWithSpacing() * 8.0f + 8.0f;
-				ImGui::BeginChild(
-					"##LibwdiInstanceIds",
-					ImVec2(0.0f, listH),
-					true,
-					ImGuiWindowFlags_HorizontalScrollbar);
-				for (int i = 0; i < static_cast<int>(g_libwdiUsbInstanceIdsUtf8.size()); ++i)
-				{
-					ImGui::PushID(i);
-					ImGui::Bullet();
-					ImGui::SameLine();
-					ImGui::TextUnformatted(g_libwdiUsbInstanceIdsUtf8[static_cast<size_t>(i)].c_str());
-					ImGui::PopID();
-				}
-				ImGui::EndChild();
-				ImGui::Spacing();
-				if (ImGui::Button("OK", ImVec2(100, 0)))
-					g_showLibwdiUsbWarning = false;
+				ImGui::PushID(i);
+				ImGui::Bullet();
+				ImGui::SameLine();
+				ImGui::TextUnformatted(g_libwdiUsbInstanceIdsUtf8[static_cast<size_t>(i)].c_str());
+				ImGui::PopID();
 			}
-			ImGui::End();
+			ImGui::EndChild();
+			ImGui::Spacing();
+			if (ImGui::Button("OK", ImVec2(100, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+				g_showLibwdiUsbWarning = false;
+			}
+			ImGui::EndPopup();
 		}
 
 		ImGui::Render();
