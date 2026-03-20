@@ -28,6 +28,7 @@
 #include "sony_layout.h"
 #include "texture_loader.h"
 #include "hidhide_probe.h"
+#include "libwdi_probe.h"
 #include "resource.h"
 
 #define IDM_ABOUT 0xF200
@@ -224,7 +225,39 @@ static bool g_showAbout = false;
 static bool g_showPreferences = false;
 static bool g_showHidHideWarning = false;
 static bool g_showHidHideBlockedWarning = false;
+static bool g_showLibwdiUsbWarning = false;
+static std::vector<std::string> g_libwdiUsbInstanceIdsUtf8;
+/** Non-empty if the libwdi USB probe failed (enumeration error); instance ID list is not used in that case. */
+static std::string g_libwdiUsbProbeErrorUtf8;
 static AppPrefs g_prefs;
+
+static std::string WideToUtf8(const std::wstring_view w)
+{
+	if (w.empty())
+		return {};
+	const int n = WideCharToMultiByte(
+		CP_UTF8,
+		0,
+		w.data(),
+		static_cast<int>(w.size()),
+		nullptr,
+		0,
+		nullptr,
+		nullptr);
+	if (n <= 0)
+		return {};
+	std::string out(static_cast<size_t>(n), '\0');
+	WideCharToMultiByte(
+		CP_UTF8,
+		0,
+		w.data(),
+		static_cast<int>(w.size()),
+		out.data(),
+		n,
+		nullptr,
+		nullptr);
+	return out;
+}
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
 	HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -370,6 +403,29 @@ int APIENTRY wWinMain(
 		break;
 	default:
 		break;
+	}
+
+	{
+		const LibwdiUsbProbeResult libwdiProbe = ProbeLibwdiUsbDevices();
+		if (!libwdiProbe.succeeded)
+		{
+			g_showLibwdiUsbWarning = true;
+			g_libwdiUsbInstanceIdsUtf8.clear();
+			g_libwdiUsbProbeErrorUtf8 = WideToUtf8(libwdiProbe.errorMessage);
+		}
+		else if (!libwdiProbe.instanceIds.empty())
+		{
+			g_showLibwdiUsbWarning = true;
+			g_libwdiUsbProbeErrorUtf8.clear();
+			g_libwdiUsbInstanceIdsUtf8.clear();
+			g_libwdiUsbInstanceIdsUtf8.reserve(libwdiProbe.instanceIds.size());
+			for (const auto& id : libwdiProbe.instanceIds)
+				g_libwdiUsbInstanceIdsUtf8.push_back(WideToUtf8(id));
+		}
+		else
+		{
+			g_libwdiUsbProbeErrorUtf8.clear();
+		}
 	}
 
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureXbox;
@@ -620,50 +676,136 @@ int APIENTRY wWinMain(
 			ImGui::End();
 		}
 
+		const char* const kHidHideActivePopupId = "HidHide Active Warning";
 		if (g_showHidHideWarning)
+			ImGui::OpenPopup(kHidHideActivePopupId);
+
+		const bool hidHideActivePopupActive =
+			g_showHidHideWarning || ImGui::IsPopupOpen(kHidHideActivePopupId, ImGuiPopupFlags_None);
+		if (hidHideActivePopupActive)
 		{
 			const float warningMinW = 460.f, warningMinH = 170.f;
 			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
 			                                    ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
 			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::Begin("HidHide Active Warning", &g_showHidHideWarning,
-			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
-			                     ImGuiWindowFlags_NoResize))
+		}
+		if (ImGui::BeginPopupModal(
+			    kHidHideActivePopupId,
+			    &g_showHidHideWarning,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			ImGui::TextWrapped("HidHide is installed and currently active on this system.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("When active, HidHide can hide physical controllers from applications and may skew MultiPad Tester detection and backend comparison results.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("For most accurate results, disable device hiding in HidHide or uninstall HidHide before testing.");
+			ImGui::Spacing();
+			if (ImGui::Button("OK", ImVec2(100, 0)))
 			{
-				ImGui::TextWrapped("HidHide is installed and currently active on this system.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("When active, HidHide can hide physical controllers from applications and may skew MultiPad Tester detection and backend comparison results.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("For most accurate results, disable device hiding in HidHide or uninstall HidHide before testing.");
-				ImGui::Spacing();
-				if (ImGui::Button("OK", ImVec2(100, 0)))
-					g_showHidHideWarning = false;
+				ImGui::CloseCurrentPopup();
+				g_showHidHideWarning = false;
 			}
-			ImGui::End();
+			ImGui::EndPopup();
 		}
 
+		const char* const kHidHideBlockedPopupId = "HidHide Interface Blocked";
 		if (g_showHidHideBlockedWarning)
+			ImGui::OpenPopup(kHidHideBlockedPopupId);
+
+		const bool hidHideBlockedPopupActive =
+			g_showHidHideBlockedWarning || ImGui::IsPopupOpen(kHidHideBlockedPopupId, ImGuiPopupFlags_None);
+		if (hidHideBlockedPopupActive)
 		{
 			const float warningMinW = 500.f, warningMinH = 190.f;
 			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
 			                                    ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
 			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::Begin("HidHide Interface Blocked", &g_showHidHideBlockedWarning,
-			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
-			                     ImGuiWindowFlags_NoResize))
+		}
+		if (ImGui::BeginPopupModal(
+			    kHidHideBlockedPopupId,
+			    &g_showHidHideBlockedWarning,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			ImGui::TextWrapped("HidHide appears to be installed, but its control interface is currently blocked by another process.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("HidHide enforces exclusive handle access, so MultiPad Tester could not accurately query whether device hiding is active.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("For accurate probing and results, close all other applications that may use HidHide (for example the HidHide configuration client) and restart MultiPad Tester.");
+			ImGui::Spacing();
+			if (ImGui::Button("OK", ImVec2(100, 0)))
 			{
-				ImGui::TextWrapped("HidHide appears to be installed, but its control interface is currently blocked by another process.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("HidHide enforces exclusive handle access, so MultiPad Tester could not accurately query whether device hiding is active.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("For accurate probing and results, close all other applications that may use HidHide (for example the HidHide configuration client) and restart MultiPad Tester.");
-				ImGui::Spacing();
-				if (ImGui::Button("OK", ImVec2(100, 0)))
-					g_showHidHideBlockedWarning = false;
+				ImGui::CloseCurrentPopup();
+				g_showHidHideBlockedWarning = false;
 			}
-			ImGui::End();
+			ImGui::EndPopup();
+		}
+
+		// True modal: OpenPopup + BeginPopupModal (ImGuiWindowFlags_Modal on Begin is not a real modal stack)
+		const char* const kLibwdiUsbPopupId = "Zadig / libwdi driver detected";
+		if (g_showLibwdiUsbWarning)
+			ImGui::OpenPopup(kLibwdiUsbPopupId);
+
+		const bool libwdiPopupActive =
+			g_showLibwdiUsbWarning || ImGui::IsPopupOpen(kLibwdiUsbPopupId, ImGuiPopupFlags_None);
+		if (libwdiPopupActive)
+		{
+			const float warningMinW = 520.f, warningMinH = 240.f;
+			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
+			                                    ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		}
+		if (ImGui::BeginPopupModal(
+			    kLibwdiUsbPopupId,
+			    &g_showLibwdiUsbWarning,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			if (!g_libwdiUsbProbeErrorUtf8.empty())
+			{
+				ImGui::TextWrapped(
+					"MultiPad Tester could not enumerate USBDevice-class devices to check for Zadig / libwdi drivers.");
+				ImGui::Spacing();
+				ImGui::TextUnformatted("Details:");
+				ImGui::Spacing();
+				ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + ImGui::GetContentRegionAvail().x);
+				ImGui::TextUnformatted(g_libwdiUsbProbeErrorUtf8.c_str());
+				ImGui::PopTextWrapPos();
+			}
+			else
+			{
+				ImGui::TextWrapped(
+					"At least one device in the \"Universal Serial Bus devices\" (USBDevice) class is using a driver installed by Zadig / libwdi (Provider: libwdi).");
+				ImGui::Spacing();
+				ImGui::TextWrapped(
+					"Those devices are not discoverable by MultiPad Tester through normal gamepad/HID APIs. To have affected controllers detected again, undo the driver replacement in Device Manager (or restore the original driver stack) for those devices.");
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::TextUnformatted("Affected device instance IDs:");
+				const float listH = ImGui::GetTextLineHeightWithSpacing() * 8.0f + 8.0f;
+				ImGui::BeginChild(
+					"##LibwdiInstanceIds",
+					ImVec2(0.0f, listH),
+					true,
+					ImGuiWindowFlags_HorizontalScrollbar);
+				for (int i = 0; i < static_cast<int>(g_libwdiUsbInstanceIdsUtf8.size()); ++i)
+				{
+					ImGui::PushID(i);
+					ImGui::Bullet();
+					ImGui::SameLine();
+					ImGui::TextUnformatted(g_libwdiUsbInstanceIdsUtf8[static_cast<size_t>(i)].c_str());
+					ImGui::PopID();
+				}
+				ImGui::EndChild();
+			}
+			ImGui::Spacing();
+			if (ImGui::Button("OK", ImVec2(100, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+				g_showLibwdiUsbWarning = false;
+			}
+			ImGui::EndPopup();
 		}
 
 		ImGui::Render();
