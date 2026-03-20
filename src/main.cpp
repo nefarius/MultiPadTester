@@ -27,6 +27,7 @@
 #include "gamepad_renderer.h"
 #include "sony_layout.h"
 #include "texture_loader.h"
+#include "hidhide_probe.h"
 #include "resource.h"
 
 #define IDM_ABOUT 0xF200
@@ -221,6 +222,7 @@ static D3DContext g_d3d;
 static std::vector<std::unique_ptr<IInputBackend>>* g_backends = nullptr;
 static bool g_showAbout = false;
 static bool g_showPreferences = false;
+static bool g_showHidHideWarning = false;
 static AppPrefs g_prefs;
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
@@ -357,6 +359,7 @@ int APIENTRY wWinMain(
 
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_d3d.device.get(), g_d3d.deviceCtx.get());
+	g_showHidHideWarning = (GetHidHideStatus() == HidHideStatus::InstalledActive);
 
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureXbox;
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureDualSense;
@@ -602,6 +605,29 @@ int APIENTRY wWinMain(
 				ImGui::SameLine();
 				if (ImGui::Button("Cancel", ImVec2(80, 0)))
 					g_showPreferences = false;
+			}
+			ImGui::End();
+		}
+
+		if (g_showHidHideWarning)
+		{
+			const float warningMinW = 460.f, warningMinH = 170.f;
+			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
+			                                    ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::Begin("HidHide Active Warning", &g_showHidHideWarning,
+			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
+			                     ImGuiWindowFlags_NoResize))
+			{
+				ImGui::TextWrapped("HidHide is installed and currently active on this system.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("When active, HidHide can hide physical controllers from applications and may skew MultiPad Tester detection and backend comparison results.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("For most accurate results, disable device hiding in HidHide or uninstall HidHide before testing.");
+				ImGui::Spacing();
+				if (ImGui::Button("OK", ImVec2(100, 0)))
+					g_showHidHideWarning = false;
 			}
 			ImGui::End();
 		}
