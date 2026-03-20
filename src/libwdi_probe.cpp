@@ -155,12 +155,42 @@ namespace
 		if (regType != REG_MULTI_SZ)
 			return false;
 
-		const auto* p = reinterpret_cast<const wchar_t*>(buf.data());
-		while (*p != L'\0')
+		if (buf.size() % sizeof(wchar_t) != 0)
+			return false;
+
+		const auto* const base = reinterpret_cast<const wchar_t*>(buf.data());
+		const auto* const end = base + (buf.size() / sizeof(wchar_t));
+
+		const wchar_t* p = base;
+		while (p < end)
 		{
-			out.emplace_back(p);
-			p += out.back().size() + 1;
+			if (*p == L'\0')
+			{
+				// Empty entry terminates the REG_MULTI_SZ list (final double-null).
+				break;
+			}
+
+			const wchar_t* term = p;
+			while (term < end && *term != L'\0')
+				++term;
+			if (term >= end)
+			{
+				out.clear();
+				return false;
+			}
+
+			const size_t len = static_cast<size_t>(term - p);
+			const wchar_t* const next = term + 1;
+			if (next > end)
+			{
+				out.clear();
+				return false;
+			}
+
+			out.emplace_back(p, len);
+			p = next;
 		}
+
 		return !out.empty();
 	}
 
