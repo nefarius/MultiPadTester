@@ -227,6 +227,8 @@ static bool g_showHidHideWarning = false;
 static bool g_showHidHideBlockedWarning = false;
 static bool g_showLibwdiUsbWarning = false;
 static std::vector<std::string> g_libwdiUsbInstanceIdsUtf8;
+/** Non-empty if the libwdi USB probe failed (enumeration error); instance ID list is not used in that case. */
+static std::string g_libwdiUsbProbeErrorUtf8;
 static AppPrefs g_prefs;
 
 static std::string WideToUtf8(const std::wstring_view w)
@@ -405,13 +407,24 @@ int APIENTRY wWinMain(
 
 	{
 		const LibwdiUsbProbeResult libwdiProbe = ProbeLibwdiUsbDevices();
-		if (!libwdiProbe.instanceIds.empty())
+		if (!libwdiProbe.succeeded)
 		{
 			g_showLibwdiUsbWarning = true;
+			g_libwdiUsbInstanceIdsUtf8.clear();
+			g_libwdiUsbProbeErrorUtf8 = WideToUtf8(libwdiProbe.errorMessage);
+		}
+		else if (!libwdiProbe.instanceIds.empty())
+		{
+			g_showLibwdiUsbWarning = true;
+			g_libwdiUsbProbeErrorUtf8.clear();
 			g_libwdiUsbInstanceIdsUtf8.clear();
 			g_libwdiUsbInstanceIdsUtf8.reserve(libwdiProbe.instanceIds.size());
 			for (const auto& id : libwdiProbe.instanceIds)
 				g_libwdiUsbInstanceIdsUtf8.push_back(WideToUtf8(id));
+		}
+		else
+		{
+			g_libwdiUsbProbeErrorUtf8.clear();
 		}
 	}
 
@@ -749,29 +762,43 @@ int APIENTRY wWinMain(
 			    &g_showLibwdiUsbWarning,
 			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
 		{
-			ImGui::TextWrapped(
-				"At least one device in the \"Universal Serial Bus devices\" (USBDevice) class is using a driver installed by Zadig / libwdi (Provider: libwdi).");
-			ImGui::Spacing();
-			ImGui::TextWrapped(
-				"Those devices are not discoverable by MultiPad Tester through normal gamepad/HID APIs. To have affected controllers detected again, undo the driver replacement in Device Manager (or restore the original driver stack) for those devices.");
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::TextUnformatted("Affected device instance IDs:");
-			const float listH = ImGui::GetTextLineHeightWithSpacing() * 8.0f + 8.0f;
-			ImGui::BeginChild(
-				"##LibwdiInstanceIds",
-				ImVec2(0.0f, listH),
-				true,
-				ImGuiWindowFlags_HorizontalScrollbar);
-			for (int i = 0; i < static_cast<int>(g_libwdiUsbInstanceIdsUtf8.size()); ++i)
+			if (!g_libwdiUsbProbeErrorUtf8.empty())
 			{
-				ImGui::PushID(i);
-				ImGui::Bullet();
-				ImGui::SameLine();
-				ImGui::TextUnformatted(g_libwdiUsbInstanceIdsUtf8[static_cast<size_t>(i)].c_str());
-				ImGui::PopID();
+				ImGui::TextWrapped(
+					"MultiPad Tester could not enumerate USBDevice-class devices to check for Zadig / libwdi drivers.");
+				ImGui::Spacing();
+				ImGui::TextUnformatted("Details:");
+				ImGui::Spacing();
+				ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + ImGui::GetContentRegionAvail().x);
+				ImGui::TextUnformatted(g_libwdiUsbProbeErrorUtf8.c_str());
+				ImGui::PopTextWrapPos();
 			}
-			ImGui::EndChild();
+			else
+			{
+				ImGui::TextWrapped(
+					"At least one device in the \"Universal Serial Bus devices\" (USBDevice) class is using a driver installed by Zadig / libwdi (Provider: libwdi).");
+				ImGui::Spacing();
+				ImGui::TextWrapped(
+					"Those devices are not discoverable by MultiPad Tester through normal gamepad/HID APIs. To have affected controllers detected again, undo the driver replacement in Device Manager (or restore the original driver stack) for those devices.");
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::TextUnformatted("Affected device instance IDs:");
+				const float listH = ImGui::GetTextLineHeightWithSpacing() * 8.0f + 8.0f;
+				ImGui::BeginChild(
+					"##LibwdiInstanceIds",
+					ImVec2(0.0f, listH),
+					true,
+					ImGuiWindowFlags_HorizontalScrollbar);
+				for (int i = 0; i < static_cast<int>(g_libwdiUsbInstanceIdsUtf8.size()); ++i)
+				{
+					ImGui::PushID(i);
+					ImGui::Bullet();
+					ImGui::SameLine();
+					ImGui::TextUnformatted(g_libwdiUsbInstanceIdsUtf8[static_cast<size_t>(i)].c_str());
+					ImGui::PopID();
+				}
+				ImGui::EndChild();
+			}
 			ImGui::Spacing();
 			if (ImGui::Button("OK", ImVec2(100, 0)))
 			{

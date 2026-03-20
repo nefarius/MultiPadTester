@@ -10,10 +10,43 @@
 #include <array>
 #include <cwctype>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace
 {
+	std::wstring FormatProbeFailure(const std::wstring_view context, const DWORD err)
+	{
+		wchar_t* sysBuf = nullptr;
+		const DWORD n = FormatMessageW(
+			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			nullptr,
+			err,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			reinterpret_cast<LPWSTR>(&sysBuf),
+			0,
+			nullptr);
+		std::wstring msg;
+		msg.reserve(context.size() + 64 + (n ? n : 0));
+		msg.append(context);
+		msg.append(L" (Win32 error ");
+		msg.append(std::to_wstring(err));
+		msg.append(L")");
+		if (n != 0 && sysBuf != nullptr)
+		{
+			msg.append(L": ");
+			msg.append(sysBuf, n);
+			LocalFree(sysBuf);
+			while (!msg.empty() && (msg.back() == L'\r' || msg.back() == L'\n'))
+				msg.pop_back();
+		}
+		else if (sysBuf != nullptr)
+		{
+			LocalFree(sysBuf);
+		}
+		return msg;
+	}
+
 	// "USBDevice" — Universal Serial Bus devices (WinUSB, Zadig, etc.)
 	// https://learn.microsoft.com/en-us/windows-hardware/drivers/install/system-defined-device-setup-classes-available-to-vendors
 	const GUID kGuidDevClassUsbDevice = {
@@ -265,7 +298,11 @@ LibwdiUsbProbeResult ProbeLibwdiUsbDevices()
 		nullptr,
 		DIGCF_PRESENT);
 	if (devInfoSet == INVALID_HANDLE_VALUE)
+	{
+		result.succeeded = false;
+		result.errorMessage = FormatProbeFailure(L"SetupDiGetClassDevsW failed", GetLastError());
 		return result;
+	}
 
 	SP_DEVINFO_DATA devInfoData{};
 	devInfoData.cbSize = sizeof(devInfoData);
@@ -290,5 +327,7 @@ LibwdiUsbProbeResult ProbeLibwdiUsbDevices()
 	SetupDiDestroyDeviceInfoList(devInfoSet);
 
 	std::sort(result.instanceIds.begin(), result.instanceIds.end());
+	result.succeeded = true;
+	result.errorMessage.clear();
 	return result;
 }
