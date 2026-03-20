@@ -663,50 +663,70 @@ int APIENTRY wWinMain(
 			ImGui::End();
 		}
 
+		const char* const kHidHideActivePopupId = "HidHide Active Warning";
 		if (g_showHidHideWarning)
+			ImGui::OpenPopup(kHidHideActivePopupId);
+
+		const bool hidHideActivePopupActive =
+			g_showHidHideWarning || ImGui::IsPopupOpen(kHidHideActivePopupId, ImGuiPopupFlags_None);
+		if (hidHideActivePopupActive)
 		{
 			const float warningMinW = 460.f, warningMinH = 170.f;
 			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
 			                                    ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
 			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::Begin("HidHide Active Warning", &g_showHidHideWarning,
-			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
-			                     ImGuiWindowFlags_NoResize))
+		}
+		if (ImGui::BeginPopupModal(
+			    kHidHideActivePopupId,
+			    &g_showHidHideWarning,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			ImGui::TextWrapped("HidHide is installed and currently active on this system.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("When active, HidHide can hide physical controllers from applications and may skew MultiPad Tester detection and backend comparison results.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("For most accurate results, disable device hiding in HidHide or uninstall HidHide before testing.");
+			ImGui::Spacing();
+			if (ImGui::Button("OK", ImVec2(100, 0)))
 			{
-				ImGui::TextWrapped("HidHide is installed and currently active on this system.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("When active, HidHide can hide physical controllers from applications and may skew MultiPad Tester detection and backend comparison results.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("For most accurate results, disable device hiding in HidHide or uninstall HidHide before testing.");
-				ImGui::Spacing();
-				if (ImGui::Button("OK", ImVec2(100, 0)))
-					g_showHidHideWarning = false;
+				ImGui::CloseCurrentPopup();
+				g_showHidHideWarning = false;
 			}
-			ImGui::End();
+			ImGui::EndPopup();
 		}
 
+		const char* const kHidHideBlockedPopupId = "HidHide Interface Blocked";
 		if (g_showHidHideBlockedWarning)
+			ImGui::OpenPopup(kHidHideBlockedPopupId);
+
+		const bool hidHideBlockedPopupActive =
+			g_showHidHideBlockedWarning || ImGui::IsPopupOpen(kHidHideBlockedPopupId, ImGuiPopupFlags_None);
+		if (hidHideBlockedPopupActive)
 		{
 			const float warningMinW = 500.f, warningMinH = 190.f;
 			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
 			                                    ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
 			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::Begin("HidHide Interface Blocked", &g_showHidHideBlockedWarning,
-			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
-			                     ImGuiWindowFlags_NoResize))
+		}
+		if (ImGui::BeginPopupModal(
+			    kHidHideBlockedPopupId,
+			    &g_showHidHideBlockedWarning,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			ImGui::TextWrapped("HidHide appears to be installed, but its control interface is currently blocked by another process.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("HidHide enforces exclusive handle access, so MultiPad Tester could not accurately query whether device hiding is active.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("For accurate probing and results, close all other applications that may use HidHide (for example the HidHide configuration client) and restart MultiPad Tester.");
+			ImGui::Spacing();
+			if (ImGui::Button("OK", ImVec2(100, 0)))
 			{
-				ImGui::TextWrapped("HidHide appears to be installed, but its control interface is currently blocked by another process.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("HidHide enforces exclusive handle access, so MultiPad Tester could not accurately query whether device hiding is active.");
-				ImGui::Spacing();
-				ImGui::TextWrapped("For accurate probing and results, close all other applications that may use HidHide (for example the HidHide configuration client) and restart MultiPad Tester.");
-				ImGui::Spacing();
-				if (ImGui::Button("OK", ImVec2(100, 0)))
-					g_showHidHideBlockedWarning = false;
+				ImGui::CloseCurrentPopup();
+				g_showHidHideBlockedWarning = false;
 			}
-			ImGui::End();
+			ImGui::EndPopup();
 		}
 
 		// True modal: OpenPopup + BeginPopupModal (ImGuiWindowFlags_Modal on Begin is not a real modal stack)
