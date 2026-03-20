@@ -223,6 +223,7 @@ static std::vector<std::unique_ptr<IInputBackend>>* g_backends = nullptr;
 static bool g_showAbout = false;
 static bool g_showPreferences = false;
 static bool g_showHidHideWarning = false;
+static bool g_showHidHideBlockedWarning = false;
 static AppPrefs g_prefs;
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
@@ -359,7 +360,17 @@ int APIENTRY wWinMain(
 
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_d3d.device.get(), g_d3d.deviceCtx.get());
-	g_showHidHideWarning = (GetHidHideStatus() == HidHideStatus::InstalledActive);
+	switch (GetHidHideStatus())
+	{
+	case HidHideStatus::InstalledActive:
+		g_showHidHideWarning = true;
+		break;
+	case HidHideStatus::AccessDenied:
+		g_showHidHideBlockedWarning = true;
+		break;
+	default:
+		break;
+	}
 
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureXbox;
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureDualSense;
@@ -628,6 +639,29 @@ int APIENTRY wWinMain(
 				ImGui::Spacing();
 				if (ImGui::Button("OK", ImVec2(100, 0)))
 					g_showHidHideWarning = false;
+			}
+			ImGui::End();
+		}
+
+		if (g_showHidHideBlockedWarning)
+		{
+			const float warningMinW = 500.f, warningMinH = 190.f;
+			ImGui::SetNextWindowSizeConstraints(ImVec2(warningMinW, warningMinH),
+			                                    ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::Begin("HidHide Interface Blocked", &g_showHidHideBlockedWarning,
+			                 ImGuiWindowFlags_Modal | ImGuiWindowFlags_AlwaysAutoResize |
+			                     ImGuiWindowFlags_NoResize))
+			{
+				ImGui::TextWrapped("HidHide appears to be installed, but its control interface is currently blocked by another process.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("HidHide enforces exclusive handle access, so MultiPad Tester could not accurately query whether device hiding is active.");
+				ImGui::Spacing();
+				ImGui::TextWrapped("For accurate probing and results, close all other applications that may use HidHide (for example the HidHide configuration client) and restart MultiPad Tester.");
+				ImGui::Spacing();
+				if (ImGui::Button("OK", ImVec2(100, 0)))
+					g_showHidHideBlockedWarning = false;
 			}
 			ImGui::End();
 		}

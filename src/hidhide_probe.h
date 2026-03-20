@@ -5,6 +5,7 @@ enum class HidHideStatus
 	NotInstalled,
 	InstalledInactive,
 	InstalledActive,
+	AccessDenied,
 	QueryFailed
 };
 
