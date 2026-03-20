@@ -36,32 +36,8 @@ jobs:
       - name: Bootstrap vcpkg
         run: vcpkg/bootstrap-vcpkg.bat
 
-      - name: Get GameInput SDK
-        shell: pwsh
-        run: |
-          $version = "3.3.163"
-          $nupkgUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.gameinput/$version/microsoft.gameinput.$version.nupkg"
-          $sdkDir = "$env:RUNNER_TEMP\GameInputSdk"
-          New-Item -ItemType Directory -Path $sdkDir -Force | Out-Null
-          $nupkgPath = "$sdkDir\microsoft.gameinput.$version.nupkg"
-          Invoke-WebRequest -Uri $nupkgUrl -OutFile $nupkgPath -UseBasicParsing
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [System.IO.Compression.ZipFile]::ExtractToDirectory($nupkgPath, $sdkDir)
-          Remove-Item $nupkgPath -Force
-          $nativePath = "$sdkDir\build\native"
-          if (-not (Test-Path $nativePath)) {
-            $subdir = Get-ChildItem -Path $sdkDir -Directory | Select-Object -First 1
-            if ($subdir) { $nativePath = (Join-Path $subdir.FullName "build\native") }
-          }
-          if (-not (Test-Path $nativePath)) {
-            Write-Error "GameInput SDK build/native not found under $sdkDir"
-            exit 1
-          }
-          $nativePath = (Resolve-Path $nativePath).Path
-          echo "GAMEINPUT_ROOT=$nativePath" >> $env:GITHUB_ENV
-
       - name: Configure
-        run: cmake --preset default -DUSE_GAMEINPUT=ON -DGAMEINPUT_ROOT=$env:GAMEINPUT_ROOT
+        run: cmake --preset default
 
       - name: Build Release
         run: cmake --build --preset release
