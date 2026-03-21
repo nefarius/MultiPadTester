@@ -38,6 +38,8 @@ target_link_libraries(MultiPadTester PRIVATE
     dxguid.lib
     setupapi.lib
     runtimeobject.lib
+    winhttp.lib
+    version.lib
 )
 
 target_compile_definitions(MultiPadTester PRIVATE
