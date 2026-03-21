@@ -27,13 +27,17 @@ public:
 	StartupProbeSession& operator=(StartupProbeSession&&) = delete;
 
 private:
+	void requestStopAndInvalidateNotify() noexcept;
+
 	std::atomic<HWND> hwnd_{nullptr};
 	std::optional<std::jthread> hidThread_;
 	std::optional<std::jthread> libwdiThread_;
+
+	friend void StartupProbeSession_ShutdownAsync(std::unique_ptr<StartupProbeSession>&& session);
 };
 
 bool HidHideProbe_PopResultForUi(HidHideStatus& out);
 bool LibwdiProbe_PopResultForUi(LibwdiUsbProbeResult& out);
 
-/** Joins probe workers off the calling thread (detached); pass std::move(g_startupProbeSession). */
+/** Clears notify HWND, requests jthread stop, then finishes teardown/join on a worker thread. */
 void StartupProbeSession_ShutdownAsync(std::unique_ptr<StartupProbeSession>&& session);

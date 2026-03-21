@@ -1,6 +1,7 @@
 #include "startup_probe.h"
 
 #include <mutex>
+#include <system_error>
 #include <thread>
 #include <utility>
 
@@ -110,9 +111,9 @@ StartupProbeSession::StartupProbeSession(HWND notifyHwnd)
 	}
 	catch (...)
 	{
+		hwnd_.store(nullptr, std::memory_order_release);
 		hidThread_.reset();
 		libwdiThread_.reset();
-		hwnd_.store(nullptr, std::memory_order_release);
 	}
 }
 
@@ -121,6 +122,15 @@ StartupProbeSession::~StartupProbeSession()
 	hwnd_.store(nullptr, std::memory_order_release);
 	hidThread_.reset();
 	libwdiThread_.reset();
+}
+
+void StartupProbeSession::requestStopAndInvalidateNotify() noexcept
+{
+	hwnd_.store(nullptr, std::memory_order_release);
+	if (hidThread_.has_value())
+		hidThread_->request_stop();
+	if (libwdiThread_.has_value())
+		libwdiThread_->request_stop();
 }
 
 bool HidHideProbe_PopResultForUi(HidHideStatus& out)
@@ -148,10 +158,20 @@ void StartupProbeSession_ShutdownAsync(std::unique_ptr<StartupProbeSession>&& se
 {
 	if (!session)
 		return;
-	std::thread(
-		[p = std::move(session)]() mutable
-		{
-			p.reset();
-		})
-		.detach();
+	session->requestStopAndInvalidateNotify();
+
+	StartupProbeSession* raw = session.release();
+	try
+	{
+		std::thread(
+			[raw]()
+			{
+				std::unique_ptr<StartupProbeSession> p(raw);
+			})
+			.detach();
+	}
+	catch (const std::system_error&)
+	{
+		std::unique_ptr<StartupProbeSession> syncTeardown(raw);
+	}
 }
