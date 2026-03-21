@@ -5,7 +5,6 @@
 #include <Windows.h>
 #include <Shellapi.h>
 #include <tchar.h>
-#include <atomic>
 #include <cstdint>
 #include <ctime>
 #include <algorithm>
@@ -243,7 +242,7 @@ static std::vector<std::string> g_libwdiUsbInstanceIdsUtf8;
 static std::string g_libwdiUsbProbeErrorUtf8;
 static AppPrefs g_prefs;
 
-static std::atomic<HWND> g_updateCheckHwndSlot{nullptr};
+static std::unique_ptr<UpdateCheckSession> g_updateCheckSession;
 static bool g_showUpdateAvailable = false;
 static std::string g_updateLocalVerUtf8;
 static std::string g_updateRemoteVerUtf8;
@@ -323,7 +322,7 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			return 0;
 		break;
 	case WM_DESTROY:
-		g_updateCheckHwndSlot.store(nullptr, std::memory_order_release);
+		g_updateCheckSession.reset();
 		{
 			RECT r;
 			if (GetWindowRect(hWnd, &r))
@@ -488,8 +487,13 @@ int APIENTRY wWinMain(
 	ShowWindow(hwnd, nCmdShow);
 	UpdateWindow(hwnd);
 
-	g_updateCheckHwndSlot.store(hwnd, std::memory_order_release);
-	StartBackgroundUpdateCheck(hwnd, &g_updateCheckHwndSlot, g_prefs.updateDismissedUnix);
+	try
+	{
+		g_updateCheckSession = std::make_unique<UpdateCheckSession>(hwnd, g_prefs.updateDismissedUnix);
+	}
+	catch (...)
+	{
+	}
 
 	constexpr float clearColor[4] = {0.06f, 0.06f, 0.07f, 1.0f};
 
@@ -911,6 +915,8 @@ int APIENTRY wWinMain(
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		g_d3d.Present(g_prefs.vsync);
 	}
+
+	g_updateCheckSession.reset();
 
 	g_backends = nullptr;
 

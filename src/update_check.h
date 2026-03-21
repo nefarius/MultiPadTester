@@ -4,24 +4,32 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <thread>
 
 /** Posted to `notifyHwnd` when a newer build is available (worker verified HWND is still current). */
 constexpr UINT WM_UPDATE_CHECK_READY = WM_APP + 42;
 
 /**
- * Starts a detached background thread: optional 24h suppression, HTTPS GET of build metadata,
- * compare remote FileVersion to local EXE version. On success only, posts WM_UPDATE_CHECK_READY.
- * Any failure or "no update" is silent.
- *
- * @param notifyHwnd Window to receive WM_UPDATE_CHECK_READY.
- * @param hwndSlot If non-null, PostMessage is skipped unless this equals notifyHwnd (cleared on WM_DESTROY).
- * @param updateDismissedUnix UTC Unix seconds when user dismissed the dialog; 0 = never.
+ * Owns the background update worker (`std::jthread`): requests stop and joins on destruction so shutdown
+ * does not race `PostMessage` or namespace-scope result state. The constructor swallows thread start failures.
  */
-void StartBackgroundUpdateCheck(
-	HWND notifyHwnd,
-	std::atomic<HWND>* hwndSlot,
-	int64_t updateDismissedUnix);
+class UpdateCheckSession
+{
+public:
+	explicit UpdateCheckSession(HWND notifyHwnd, int64_t updateDismissedUnix);
+	~UpdateCheckSession();
+
+	UpdateCheckSession(const UpdateCheckSession&) = delete;
+	UpdateCheckSession& operator=(const UpdateCheckSession&) = delete;
+	UpdateCheckSession(UpdateCheckSession&&) = delete;
+	UpdateCheckSession& operator=(UpdateCheckSession&&) = delete;
+
+private:
+	std::atomic<HWND> hwnd_{nullptr};
+	std::optional<std::jthread> worker_;
+};
 
 /** Call from the main thread when handling WM_UPDATE_CHECK_READY; copies version strings for the UI. */
 bool UpdateCheck_PopResultForUi(std::string& localVersionOut, std::string& remoteVersionOut);

@@ -36,6 +36,14 @@ std::string g_pendingLocal;
 std::string g_pendingRemote;
 bool g_havePending = false;
 
+void ClearPendingResult()
+{
+	std::lock_guard lock(g_resultMutex);
+	g_havePending = false;
+	g_pendingLocal.clear();
+	g_pendingRemote.clear();
+}
+
 bool ParseVersionString(std::string_view s, VersionQuad& out)
 {
 	out = {};
@@ -143,9 +151,11 @@ bool ExtractJsonFileVersion(std::string_view json, std::string& outVer)
 	return !outVer.empty();
 }
 
-bool HttpGetUtf8(const wchar_t* host, INTERNET_PORT port, const wchar_t* path, std::string& bodyOut)
+bool HttpGetUtf8(std::stop_token st, const wchar_t* host, INTERNET_PORT port, const wchar_t* path, std::string& bodyOut)
 {
 	bodyOut.clear();
+	if (st.stop_requested())
+		return false;
 	HINTERNET hSession = WinHttpOpen(
 		L"MultiPadTester/1.0",
 		WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
@@ -221,6 +231,14 @@ bool HttpGetUtf8(const wchar_t* host, INTERNET_PORT port, const wchar_t* path, s
 
 	for (;;)
 	{
+		if (st.stop_requested())
+		{
+			bodyOut.clear();
+			WinHttpCloseHandle(hRequest);
+			WinHttpCloseHandle(hConnect);
+			closeSession();
+			return false;
+		}
 		char buf[8192];
 		DWORD read = 0;
 		if (!WinHttpReadData(hRequest, buf, sizeof(buf), &read))
@@ -242,8 +260,15 @@ bool HttpGetUtf8(const wchar_t* host, INTERNET_PORT port, const wchar_t* path, s
 	return !bodyOut.empty();
 }
 
-void RunUpdateCheck(HWND notifyHwnd, std::atomic<HWND>* hwndSlot, int64_t dismissedUnix)
+void RunUpdateCheck(
+	std::stop_token st,
+	std::atomic<HWND>& hwndSlot,
+	HWND expectedHwnd,
+	int64_t dismissedUnix)
 {
+	if (st.stop_requested())
+		return;
+
 	const std::time_t now = std::time(nullptr);
 	if (dismissedUnix > 0)
 	{
@@ -252,8 +277,14 @@ void RunUpdateCheck(HWND notifyHwnd, std::atomic<HWND>* hwndSlot, int64_t dismis
 			return;
 	}
 
+	if (st.stop_requested())
+		return;
+
 	std::string json;
-	if (!HttpGetUtf8(kJsonHost, INTERNET_DEFAULT_HTTPS_PORT, kJsonPath, json))
+	if (!HttpGetUtf8(st, kJsonHost, INTERNET_DEFAULT_HTTPS_PORT, kJsonPath, json))
+		return;
+
+	if (st.stop_requested())
 		return;
 
 	std::string remoteVerStr;
@@ -272,8 +303,14 @@ void RunUpdateCheck(HWND notifyHwnd, std::atomic<HWND>* hwndSlot, int64_t dismis
 	if (CompareVersionQuad(remote, local) <= 0)
 		return;
 
-	const HWND slotHwnd = hwndSlot ? hwndSlot->load(std::memory_order_acquire) : notifyHwnd;
-	if (slotHwnd != notifyHwnd || !IsWindow(notifyHwnd))
+	if (st.stop_requested())
+		return;
+
+	const HWND slotHwnd = hwndSlot.load(std::memory_order_acquire);
+	if (slotHwnd != expectedHwnd || !IsWindow(expectedHwnd))
+		return;
+
+	if (st.stop_requested())
 		return;
 
 	{
@@ -283,17 +320,26 @@ void RunUpdateCheck(HWND notifyHwnd, std::atomic<HWND>* hwndSlot, int64_t dismis
 		g_havePending = true;
 	}
 
-	const HWND slot2 = hwndSlot ? hwndSlot->load(std::memory_order_acquire) : notifyHwnd;
-	if (slot2 != notifyHwnd || !IsWindow(notifyHwnd))
+	if (st.stop_requested())
 	{
-		std::lock_guard lock(g_resultMutex);
-		g_havePending = false;
-		g_pendingLocal.clear();
-		g_pendingRemote.clear();
+		ClearPendingResult();
 		return;
 	}
 
-	PostMessageW(notifyHwnd, WM_UPDATE_CHECK_READY, 0, 0);
+	const HWND slot2 = hwndSlot.load(std::memory_order_acquire);
+	if (slot2 != expectedHwnd || !IsWindow(expectedHwnd))
+	{
+		ClearPendingResult();
+		return;
+	}
+
+	if (st.stop_requested())
+	{
+		ClearPendingResult();
+		return;
+	}
+
+	PostMessageW(expectedHwnd, WM_UPDATE_CHECK_READY, 0, 0);
 }
 }  // namespace
 
@@ -302,11 +348,25 @@ const wchar_t* UpdateCheck_GetLatestDownloadUrlW()
 	return kDownloadUrl;
 }
 
-void StartBackgroundUpdateCheck(HWND notifyHwnd, std::atomic<HWND>* hwndSlot, int64_t dismissedUnix)
+UpdateCheckSession::UpdateCheckSession(HWND notifyHwnd, int64_t updateDismissedUnix)
 {
-	std::thread([notifyHwnd, hwndSlot, dismissedUnix]() {
-		RunUpdateCheck(notifyHwnd, hwndSlot, dismissedUnix);
-	}).detach();
+	hwnd_.store(notifyHwnd, std::memory_order_release);
+	try
+	{
+		worker_.emplace([this, notifyHwnd, updateDismissedUnix](std::stop_token st) {
+			RunUpdateCheck(st, hwnd_, notifyHwnd, updateDismissedUnix);
+		});
+	}
+	catch (...)
+	{
+		hwnd_.store(nullptr, std::memory_order_release);
+	}
+}
+
+UpdateCheckSession::~UpdateCheckSession()
+{
+	hwnd_.store(nullptr, std::memory_order_release);
+	worker_.reset();
 }
 
 bool UpdateCheck_PopResultForUi(std::string& localVersionOut, std::string& remoteVersionOut)
