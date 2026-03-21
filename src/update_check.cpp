@@ -11,6 +11,9 @@
 #include <string_view>
 #include <thread>
 
+static constexpr wchar_t kDownloadUrl[] =
+	L"https://buildbot.nefarius.at/builds/MultiPadTester/latest/MultiPadTester.zip";
+
 namespace
 {
 constexpr wchar_t kJsonHost[] = L"buildbot.nefarius.at";
@@ -115,6 +118,7 @@ bool GetLocalExeVersion(VersionQuad& quad, std::string& displayUtf8)
 
 bool ExtractJsonFileVersion(std::string_view json, std::string& outVer)
 {
+	outVer.clear();
 	const std::string_view key = "\"FileVersion\"";
 	const size_t pos = json.find(key);
 	if (pos == std::string_view::npos)
@@ -133,7 +137,7 @@ bool ExtractJsonFileVersion(std::string_view json, std::string& outVer)
 	const size_t start = i;
 	while (i < json.size() && json[i] != '"')
 		++i;
-	if (i <= start)
+	if (i >= json.size())
 		return false;
 	outVer.assign(json.data() + start, i - start);
 	return !outVer.empty();
@@ -220,7 +224,13 @@ bool HttpGetUtf8(const wchar_t* host, INTERNET_PORT port, const wchar_t* path, s
 		char buf[8192];
 		DWORD read = 0;
 		if (!WinHttpReadData(hRequest, buf, sizeof(buf), &read))
-			break;
+		{
+			bodyOut.clear();
+			WinHttpCloseHandle(hRequest);
+			WinHttpCloseHandle(hConnect);
+			closeSession();
+			return false;
+		}
 		if (read == 0)
 			break;
 		bodyOut.append(buf, read);
@@ -286,6 +296,11 @@ void RunUpdateCheck(HWND notifyHwnd, std::atomic<HWND>* hwndSlot, int64_t dismis
 	PostMessageW(notifyHwnd, WM_UPDATE_CHECK_READY, 0, 0);
 }
 }  // namespace
+
+const wchar_t* UpdateCheck_GetLatestDownloadUrlW()
+{
+	return kDownloadUrl;
+}
 
 void StartBackgroundUpdateCheck(HWND notifyHwnd, std::atomic<HWND>* hwndSlot, int64_t dismissedUnix)
 {

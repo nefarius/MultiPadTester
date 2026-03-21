@@ -756,7 +756,7 @@ int APIENTRY wWinMain(
 				ShellExecuteW(
 					nullptr,
 					L"open",
-					L"https://buildbot.nefarius.at/builds/MultiPadTester/latest/MultiPadTester.zip",
+					UpdateCheck_GetLatestDownloadUrlW(),
 					nullptr,
 					nullptr,
 					SW_SHOWNORMAL);
