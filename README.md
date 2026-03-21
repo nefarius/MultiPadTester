@@ -19,13 +19,17 @@ It polls multiple input APIs in parallel and renders one live gamepad view per d
 - Real-time state visualization for buttons, sticks, and triggers per controller.
 - Backend-local device counts to compare API coverage on the same hardware.
 - Persistent UI settings stored in `%APPDATA%\MultiPadTester\config.ini`.
+- **Fast startup:** HidHide status and Zadig/libwdi USB class probes run on **background threads** after the window is shown (similar to the optional update check), so the first frame is not blocked on device enumeration.
+- **Optional update check:** compares the running EXE version to the latest build metadata (HTTPS); you can open the download or dismiss for 24 hours. Dismissal is stored in config.
+- **Modal queue:** system notices (HidHide active/blocked, Zadig driver matches, update available) and **About** / **Preferences** use a **single ordered queue**—only one modal is shown at a time, in a stable priority order, so multiple conditions never fight in Dear ImGui’s popup stack.
+- While any queued modal is pending, **About** and **Preferences** in the window’s system menu are **greyed out** so it is obvious that dialogs are being handled in sequence.
 
 ## Limitations / Known Gaps
 
 - Windows only. Linux and macOS are not supported.
 - The GameInput tab is available only when the [GameInput redistributable](https://github.com/microsoftconnect/GameInput/releases) is installed.
-- On startup, MultiPad Tester checks for [HidHide](https://github.com/nefarius/HidHide). If HidHide is currently enabled, the app shows a warning because hidden devices can make the results less accurate. If another HidHide app is already open, you may see a different warning asking you to close those apps and restart MultiPad Tester for the best results.
-- If any device matches **USBDevice** + `Provider` **libwdi**, **libusbK devices** (`{ecfb0cfd-74c4-4f52-bbf7-343461cd72ac}`) + **libusbk**, or **libusb-win32 devices** (`{eb781aaf-9c70-4523-a5df-642a87eca567}`) + **libusb-win32** (typical [Zadig](https://zadig.akeo.ie/) installs), the app shows a warning listing those device instance IDs. Those devices are not discoverable through normal gamepad APIs until the original driver stack is restored.
+- After launch, MultiPad Tester probes for [HidHide](https://github.com/nefarius/HidHide) in the background. If HidHide is currently enabled, a warning is queued because hidden devices can make the results less accurate. If another HidHide app already holds the control interface, a different warning may be queued asking you to close those apps and restart for the best results.
+- If any device matches **USBDevice** + `Provider` **libwdi**, **libusbK devices** (`{ecfb0cfd-74c4-4f52-bbf7-343461cd72ac}`) + **libusbk**, or **libusb-win32 devices** (`{eb781aaf-9c70-4523-a5df-642a87eca567}`) + **libusb-win32** (typical [Zadig](https://zadig.akeo.ie/) installs), a warning is queued listing those device instance IDs. Those devices are not discoverable through normal gamepad APIs until the original driver stack is restored.
 - Backend results are expected to differ by API design (device class support, mapping behavior, and feature exposure).
 - This tool is for input inspection and diagnostics; it does not provide remapping, virtualization, or driver installation.
 
@@ -49,7 +53,7 @@ Unsupported targets include non-Windows hosts and ARM builds.
 ### Configuration
 
 - **Path:** `%APPDATA%\MultiPadTester\config.ini` (created on first launch).
-- **Stored values:** refresh rate, VSync state, and last window position/size.
+- **Stored values:** refresh rate, VSync, last window position/size, last selected backend tab, last time the update-available dialog was dismissed (UTC Unix seconds, used to suppress update checks for 24 hours).
 
 ## Build from Source
 
