@@ -369,6 +369,24 @@ static std::string WideToUtf8(const std::wstring_view w)
 	return out;
 }
 
+/** Grey out About/Preferences in the system menu while a modal queue is active. */
+static void UpdateSysMenuAboutPreferencesEnabled(HWND hwnd)
+{
+	HMENU menu = GetSystemMenu(hwnd, FALSE);
+	if (!menu)
+		return;
+	const bool empty = g_systemDialogQueue.empty();
+	static bool prevEmpty = true;
+	const UINT itemFlags = MF_BYCOMMAND | (empty ? MF_ENABLED : MF_GRAYED);
+	EnableMenuItem(menu, IDM_ABOUT, itemFlags);
+	EnableMenuItem(menu, IDM_PREFERENCES, itemFlags);
+	if (prevEmpty != empty)
+	{
+		prevEmpty = empty;
+		DrawMenuBar(hwnd);
+	}
+}
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
 	HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -621,6 +639,8 @@ int APIENTRY wWinMain(
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
+
+		UpdateSysMenuAboutPreferencesEnabled(hwnd);
 
 		const ImGuiViewport* vp = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(vp->WorkPos);
