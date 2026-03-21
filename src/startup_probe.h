@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <atomic>
+#include <memory>
 #include <optional>
 #include <thread>
 
@@ -33,3 +34,6 @@ private:
 
 bool HidHideProbe_PopResultForUi(HidHideStatus& out);
 bool LibwdiProbe_PopResultForUi(LibwdiUsbProbeResult& out);
+
+/** Joins probe workers off the calling thread (detached); pass std::move(g_startupProbeSession). */
+void StartupProbeSession_ShutdownAsync(std::unique_ptr<StartupProbeSession>&& session);

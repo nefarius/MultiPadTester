@@ -234,10 +234,6 @@ static void GetMonitorRefreshRate(HWND hwnd, int& numerator, int& denominator)
 
 static D3DContext g_d3d;
 static std::vector<std::unique_ptr<IInputBackend>>* g_backends = nullptr;
-static bool g_showAbout = false;
-static bool g_showPreferences = false;
-static bool g_pendingAbout = false;
-static bool g_pendingPreferences = false;
 
 enum class SystemDialog : std::uint8_t
 {
@@ -245,6 +241,8 @@ enum class SystemDialog : std::uint8_t
 	HidHideActive,
 	LibwdiUsb,
 	UpdateAvailable,
+	About,
+	Preferences,
 };
 
 static int SystemDialogPriority(SystemDialog d)
@@ -266,8 +264,11 @@ static void EnqueueSystemDialog(SystemDialog d)
 {
 	if (SystemDialogQueueContains(d))
 		return;
+	// Preserve the current front: only priority-insert into the tail (or the whole deque if empty).
+	const auto insertBegin =
+		g_systemDialogQueue.empty() ? g_systemDialogQueue.begin() : g_systemDialogQueue.begin() + 1;
 	auto it = std::lower_bound(
-		g_systemDialogQueue.begin(),
+		insertBegin,
 		g_systemDialogQueue.end(),
 		d,
 		[](SystemDialog a, SystemDialog b) {
@@ -288,6 +289,10 @@ static const char* SystemDialogPopupId(SystemDialog d)
 		return "Zadig / libwdi / libusbK / libusb-win32 driver detected";
 	case SystemDialog::UpdateAvailable:
 		return "Update available";
+	case SystemDialog::About:
+		return "About MultiPad Tester";
+	case SystemDialog::Preferences:
+		return "Preferences";
 	}
 	return "";
 }
@@ -311,6 +316,14 @@ static void SystemDialogMinSize(SystemDialog d, float& minW, float& minH)
 	case SystemDialog::UpdateAvailable:
 		minW = 400.f;
 		minH = 140.f;
+		break;
+	case SystemDialog::About:
+		minW = 320.f;
+		minH = 100.f;
+		break;
+	case SystemDialog::Preferences:
+		minW = 320.f;
+		minH = 120.f;
 		break;
 	}
 }
@@ -430,25 +443,19 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_SYSCOMMAND:
 		if ((wParam & 0xfff0) == IDM_ABOUT)
 		{
-			if (!g_systemDialogQueue.empty())
-				g_pendingAbout = true;
-			else
-				g_showAbout = true;
+			EnqueueSystemDialog(SystemDialog::About);
 			return 0;
 		}
 		if ((wParam & 0xfff0) == IDM_PREFERENCES)
 		{
-			if (!g_systemDialogQueue.empty())
-				g_pendingPreferences = true;
-			else
-				g_showPreferences = true;
+			EnqueueSystemDialog(SystemDialog::Preferences);
 			return 0;
 		}
 		if ((wParam & 0xfff0) == SC_KEYMENU)
 			return 0;
 		break;
 	case WM_DESTROY:
-		g_startupProbeSession.reset();
+		StartupProbeSession_ShutdownAsync(std::move(g_startupProbeSession));
 		g_updateCheckSession.reset();
 		{
 			RECT r;
@@ -855,6 +862,67 @@ int APIENTRY wWinMain(
 					if (ImGui::Button("OK", ImVec2(100, 0)))
 						dismissSystemDialog();
 					break;
+				case SystemDialog::About:
+					ImGui::Text("MultiPad Tester");
+					ImGui::TextWrapped("Gamepad/controller tester and visualizer for Windows, supporting multiple input APIs.");
+					ImGui::Spacing();
+					ImGui::TextWrapped(
+						"MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries four different input backends in parallel and renders a real-time gamepad visualization for every connected controller using Dear ImGui and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.");
+					ImGui::Spacing();
+					ImGui::Text("Copyright (c) 2026 Benjamin Höglinger-Stelzer");
+					ImGui::Spacing();
+					if (ImGui::Button("Open GitHub repository"))
+						ShellExecuteW(
+							nullptr,
+							L"open",
+							L"https://github.com/nefarius/MultiPadTester",
+							nullptr,
+							nullptr,
+							SW_SHOWNORMAL);
+					break;
+				case SystemDialog::Preferences:
+				{
+					static int editRefreshRate = 60;
+					static bool editVsync = true;
+					if (ImGui::IsWindowAppearing())
+					{
+						editRefreshRate = g_prefs.refreshRate;
+						editVsync = g_prefs.vsync;
+					}
+					int monitorNum = 60, monitorDen = 1;
+					GetMonitorRefreshRate(hwnd, monitorNum, monitorDen);
+					static std::string monitorDefaultLabel;
+					monitorDefaultLabel = std::format("Monitor default ({} Hz)", monitorNum);
+					const char* refreshItems[] = {
+						monitorDefaultLabel.c_str(), "60 Hz", "75 Hz", "120 Hz", "144 Hz"};
+					int idx = (editRefreshRate == 0        ? 0
+					           : editRefreshRate == 60 ? 1
+					           : editRefreshRate == 75 ? 2
+					           : editRefreshRate == 120 ? 3
+					                                     : 4);
+					if (ImGui::Combo("Refresh rate", &idx, refreshItems, 5))
+						editRefreshRate =
+							(idx == 0 ? 0 : idx == 1 ? 60 : idx == 2 ? 75 : idx == 3 ? 120 : 144);
+					ImGui::Checkbox("VSync", &editVsync);
+					ImGui::Spacing();
+					if (ImGui::Button("OK", ImVec2(80, 0)))
+					{
+						int num = 60, den = 1;
+						if (editRefreshRate == 0)
+							GetMonitorRefreshRate(hwnd, num, den);
+						else
+							num = editRefreshRate;
+						g_d3d.SetRefreshRate(num, den);
+						g_prefs.refreshRate = editRefreshRate;
+						g_prefs.vsync = editVsync;
+						SaveConfig(g_prefs);
+						dismissSystemDialog();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Cancel", ImVec2(80, 0)))
+						dismissSystemDialog();
+					break;
+				}
 				}
 				ImGui::EndPopup();
 			}
@@ -870,85 +938,6 @@ int APIENTRY wWinMain(
 		else
 			g_systemModalTrackedFront.reset();
 
-		if (g_systemDialogQueue.empty())
-		{
-			if (g_pendingAbout)
-			{
-				g_showAbout = true;
-				g_pendingAbout = false;
-			}
-			else if (g_pendingPreferences)
-			{
-				g_showPreferences = true;
-				g_pendingPreferences = false;
-			}
-		}
-
-		const char* const kAboutPopupId = "About MultiPad Tester";
-		if (g_showAbout)
-			ImGui::OpenPopup(kAboutPopupId);
-
-		if (BeginCenteredModal(kAboutPopupId, &g_showAbout, 320.f, 100.f))
-		{
-			ImGui::Text("MultiPad Tester");
-			ImGui::TextWrapped("Gamepad/controller tester and visualizer for Windows, supporting multiple input APIs.");
-			ImGui::Spacing();
-			ImGui::TextWrapped("MultiPad Tester is a self-contained C++23 Windows desktop application for testing and visualizing gamepad input. It queries four different input backends in parallel and renders a real-time gamepad visualization for every connected controller using Dear ImGui and DirectX 11. The tabbed interface lets you quickly switch between backends and see at a glance how many devices each one detects.");
-			ImGui::Spacing();
-			ImGui::Text("Copyright (c) 2026 Benjamin Höglinger-Stelzer");
-			ImGui::Spacing();
-			if (ImGui::Button("Open GitHub repository"))
-				ShellExecuteW(nullptr, L"open", L"https://github.com/nefarius/MultiPadTester",
-				              nullptr, nullptr, SW_SHOWNORMAL);
-			ImGui::EndPopup();
-		}
-
-		const char* const kPreferencesPopupId = "Preferences";
-		if (g_showPreferences)
-			ImGui::OpenPopup(kPreferencesPopupId);
-
-		if (BeginCenteredModal(kPreferencesPopupId, &g_showPreferences, 320.f, 120.f))
-		{
-			static int editRefreshRate = 60;
-			static bool editVsync = true;
-			if (ImGui::IsWindowAppearing())
-			{
-				editRefreshRate = g_prefs.refreshRate;
-				editVsync = g_prefs.vsync;
-			}
-			int monitorNum = 60, monitorDen = 1;
-			GetMonitorRefreshRate(hwnd, monitorNum, monitorDen);
-			static std::string monitorDefaultLabel;
-			monitorDefaultLabel = std::format("Monitor default ({} Hz)", monitorNum);
-			const char* refreshItems[] = {monitorDefaultLabel.c_str(), "60 Hz", "75 Hz", "120 Hz", "144 Hz"};
-			int idx = (editRefreshRate == 0 ? 0 : editRefreshRate == 60 ? 1 : editRefreshRate == 75 ? 2 : editRefreshRate == 120 ? 3 : 4);
-			if (ImGui::Combo("Refresh rate", &idx, refreshItems, 5))
-				editRefreshRate = (idx == 0 ? 0 : idx == 1 ? 60 : idx == 2 ? 75 : idx == 3 ? 120 : 144);
-			ImGui::Checkbox("VSync", &editVsync);
-			ImGui::Spacing();
-			if (ImGui::Button("OK", ImVec2(80, 0)))
-			{
-				int num = 60, den = 1;
-				if (editRefreshRate == 0)
-					GetMonitorRefreshRate(hwnd, num, den);
-				else
-					num = editRefreshRate;
-				g_d3d.SetRefreshRate(num, den);
-				g_prefs.refreshRate = editRefreshRate;
-				g_prefs.vsync = editVsync;
-				SaveConfig(g_prefs);
-				ImGui::CloseCurrentPopup();
-				g_showPreferences = false;
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Cancel", ImVec2(80, 0)))
-			{
-				ImGui::CloseCurrentPopup();
-				g_showPreferences = false;
-			}
-			ImGui::EndPopup();
-		}
-
 		ImGui::Render();
 		ID3D11RenderTargetView* rtv = g_d3d.rtv.get();
 		g_d3d.deviceCtx->OMSetRenderTargets(1, &rtv, nullptr);
@@ -958,7 +947,7 @@ int APIENTRY wWinMain(
 	}
 
 	g_updateCheckSession.reset();
-	g_startupProbeSession.reset();
+	StartupProbeSession_ShutdownAsync(std::move(g_startupProbeSession));
 
 	g_backends = nullptr;
 

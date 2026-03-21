@@ -1,6 +1,8 @@
 #include "startup_probe.h"
 
 #include <mutex>
+#include <thread>
+#include <utility>
 
 namespace
 {
@@ -140,4 +142,16 @@ bool LibwdiProbe_PopResultForUi(LibwdiUsbProbeResult& out)
 	g_libwdiHavePending = false;
 	g_libwdiPending = {};
 	return true;
+}
+
+void StartupProbeSession_ShutdownAsync(std::unique_ptr<StartupProbeSession>&& session)
+{
+	if (!session)
+		return;
+	std::thread(
+		[p = std::move(session)]() mutable
+		{
+			p.reset();
+		})
+		.detach();
 }
