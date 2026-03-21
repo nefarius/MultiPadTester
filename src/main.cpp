@@ -806,6 +806,7 @@ int APIENTRY wWinMain(
 							nullptr,
 							nullptr,
 							SW_SHOWNORMAL);
+						dismissSystemDialog();
 					}
 					ImGui::SameLine();
 					if (ImGui::Button("Not today", ImVec2(130, 0)))
