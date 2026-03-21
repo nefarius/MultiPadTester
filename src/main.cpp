@@ -5,6 +5,9 @@
 #include <Windows.h>
 #include <Shellapi.h>
 #include <tchar.h>
+#include <atomic>
+#include <cstdint>
+#include <ctime>
 #include <algorithm>
 #include <cctype>
 #include <cfloat>
@@ -30,6 +33,7 @@
 #include "hidhide_probe.h"
 #include "libwdi_probe.h"
 #include "resource.h"
+#include "update_check.h"
 
 #define IDM_ABOUT 0xF200
 #define IDM_PREFERENCES 0xF210
@@ -43,6 +47,8 @@ struct AppPrefs
 	int windowW = 0;  // 0 = use default position/size
 	int windowH = 0;
 	int lastTabIndex = 0;  // backend tab index to restore on launch
+	/** UTC Unix seconds when the user dismissed the update dialog; 0 = never. Suppresses checks for 24h. */
+	int64_t updateDismissedUnix = 0;
 };
 
 /**
@@ -69,7 +75,7 @@ static std::wstring GetConfigPath()
  *
  * Reads the config file located in the application's AppData folder and applies recognized keys
  * from the [Settings] section into the provided AppPrefs structure. Supported keys:
- * RefreshRate, VSync, WindowX, WindowY, WindowW, WindowH, LastTabIndex.
+ * RefreshRate, VSync, WindowX, WindowY, WindowW, WindowH, LastTabIndex, UpdateDismissedUnix.
  *
  * - If the config file is missing or unreadable, the function leaves prefs unchanged.
  * - RefreshRate is accepted only if it equals 0, 60, 75, 120, or 144; other values are ignored.
@@ -143,6 +149,10 @@ static void LoadConfig(AppPrefs& prefs)
 		{
 			try { prefs.lastTabIndex = std::stoi(val); } catch (...) {}
 		}
+		else if (key == "UpdateDismissedUnix")
+		{
+			try { prefs.updateDismissedUnix = std::stoll(val); } catch (...) {}
+		}
 	}
 	// Treat invalid dimensions as "not set"
 	if (prefs.windowW <= 0 || prefs.windowH <= 0)
@@ -160,6 +170,7 @@ static void LoadConfig(AppPrefs& prefs)
  *              - vsync: vertical sync enabled flag
  *              - windowX, windowY, windowW, windowH: saved window position and size
  *              - lastTabIndex: backend tab index to restore on launch
+ *              - updateDismissedUnix: UTC Unix time when update dialog was dismissed
  */
 static void SaveConfig(const AppPrefs& prefs)
 {
@@ -177,6 +188,7 @@ static void SaveConfig(const AppPrefs& prefs)
 	f << "WindowW=" << prefs.windowW << "\n";
 	f << "WindowH=" << prefs.windowH << "\n";
 	f << "LastTabIndex=" << prefs.lastTabIndex << "\n";
+	f << "UpdateDismissedUnix=" << prefs.updateDismissedUnix << "\n";
 }
 
 /**
@@ -231,6 +243,11 @@ static std::vector<std::string> g_libwdiUsbInstanceIdsUtf8;
 static std::string g_libwdiUsbProbeErrorUtf8;
 static AppPrefs g_prefs;
 
+static std::atomic<HWND> g_updateCheckHwndSlot{nullptr};
+static bool g_showUpdateAvailable = false;
+static std::string g_updateLocalVerUtf8;
+static std::string g_updateRemoteVerUtf8;
+
 static std::string WideToUtf8(const std::wstring_view w)
 {
 	if (w.empty())
@@ -275,6 +292,18 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 	switch (msg)
 	{
+	case WM_UPDATE_CHECK_READY:
+		{
+			std::string loc;
+			std::string rem;
+			if (UpdateCheck_PopResultForUi(loc, rem))
+			{
+				g_updateLocalVerUtf8 = std::move(loc);
+				g_updateRemoteVerUtf8 = std::move(rem);
+				g_showUpdateAvailable = true;
+			}
+		}
+		return 0;
 	case WM_SIZE:
 		if (g_d3d.device && wParam != SIZE_MINIMIZED)
 			g_d3d.Resize(lParam);
@@ -294,6 +323,7 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			return 0;
 		break;
 	case WM_DESTROY:
+		g_updateCheckHwndSlot.store(nullptr, std::memory_order_release);
 		{
 			RECT r;
 			if (GetWindowRect(hWnd, &r))
@@ -457,6 +487,9 @@ int APIENTRY wWinMain(
 
 	ShowWindow(hwnd, nCmdShow);
 	UpdateWindow(hwnd);
+
+	g_updateCheckHwndSlot.store(hwnd, std::memory_order_release);
+	StartBackgroundUpdateCheck(hwnd, &g_updateCheckHwndSlot, g_prefs.updateDismissedUnix);
 
 	constexpr float clearColor[4] = {0.06f, 0.06f, 0.07f, 1.0f};
 
@@ -690,6 +723,51 @@ int APIENTRY wWinMain(
 			{
 				ImGui::CloseCurrentPopup();
 				g_showPreferences = false;
+			}
+			ImGui::EndPopup();
+		}
+
+		const char* const kUpdateAvailablePopupId = "Update available";
+		if (g_showUpdateAvailable)
+			ImGui::OpenPopup(kUpdateAvailablePopupId);
+
+		const bool updatePopupActive =
+			g_showUpdateAvailable || ImGui::IsPopupOpen(kUpdateAvailablePopupId, ImGuiPopupFlags_None);
+		if (updatePopupActive)
+		{
+			const float updateMinW = 400.f, updateMinH = 140.f;
+			ImGui::SetNextWindowSizeConstraints(ImVec2(updateMinW, updateMinH),
+			                                    ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+			                        ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		}
+		if (ImGui::BeginPopupModal(
+			    kUpdateAvailablePopupId,
+			    &g_showUpdateAvailable,
+			    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize))
+		{
+			ImGui::TextWrapped("A newer version of MultiPad Tester is available.");
+			ImGui::Spacing();
+			ImGui::Text("Installed version: %s", g_updateLocalVerUtf8.c_str());
+			ImGui::Text("Latest version: %s", g_updateRemoteVerUtf8.c_str());
+			ImGui::Spacing();
+			if (ImGui::Button("Download update", ImVec2(140, 0)))
+			{
+				ShellExecuteW(
+					nullptr,
+					L"open",
+					L"https://buildbot.nefarius.at/builds/MultiPadTester/latest/MultiPadTester.zip",
+					nullptr,
+					nullptr,
+					SW_SHOWNORMAL);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Not today", ImVec2(130, 0)))
+			{
+				g_prefs.updateDismissedUnix = static_cast<int64_t>(std::time(nullptr));
+				SaveConfig(g_prefs);
+				ImGui::CloseCurrentPopup();
+				g_showUpdateAvailable = false;
 			}
 			ImGui::EndPopup();
 		}
