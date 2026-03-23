@@ -9,7 +9,7 @@ Windows gamepad/controller tester and visualizer with side-by-side backend cover
 
 ## About
 
-MultiPad Tester is a self-contained C++23 Win32 desktop tool for inspecting controller input in real time.  
+MultiPad Tester (MPT) is a self-contained C++23 Win32 desktop tool for inspecting controller input in real time.  
 Release builds link the **Microsoft C/C++ runtime statically** (`/MT`), so the prebuilt `MultiPadTester.exe` does not depend on the separate VC++ redistributable (`MSVCP140.dll`, etc.).  
 It polls multiple input APIs in parallel and renders one live gamepad view per detected device using [Dear ImGui](https://github.com/ocornut/imgui) and DirectX 11.
 
