@@ -44,6 +44,8 @@ Live view with each backend tab selected. Tab counts reflect devices detected on
 - After launch, MultiPad Tester probes for [HidHide](https://github.com/nefarius/HidHide) in the background. If HidHide is currently enabled, a warning is queued because hidden devices can make the results less accurate. If another HidHide app already holds the control interface, a different warning may be queued asking you to close those apps and restart for the best results.
 - If any device matches **USBDevice** + `Provider` **libwdi**, **libusbK devices** (`{ecfb0cfd-74c4-4f52-bbf7-343461cd72ac}`) + **libusbk**, or **libusb-win32 devices** (`{eb781aaf-9c70-4523-a5df-642a87eca567}`) + **libusb-win32** (typical [Zadig](https://zadig.akeo.ie/) installs), a warning is queued listing those device instance IDs. Those devices are not discoverable through normal gamepad APIs until the original driver stack is restored.
 - Backend results are expected to differ by API design (device class support, mapping behavior, and feature exposure).
+- So far, manual testing has only covered Sony DualShock 4 Rev. 2, Sony DualSense, Microsoft Xbox One, and an Xbox One aftermarket controller.
+- Other devices may show the wrong model render or mismatched mapping.
 - This tool is for input inspection and diagnostics; it does not provide remapping, virtualization, or driver installation.
 
 ## Supported Systems
