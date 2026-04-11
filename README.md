@@ -24,6 +24,19 @@ It polls multiple input APIs in parallel and renders one live gamepad view per d
 - **Modal queue:** system notices (HidHide active/blocked, Zadig driver matches, update available) and **About** / **Preferences** use a **single ordered queue**—only one modal is shown at a time, in a stable priority order, so multiple conditions never fight in Dear ImGui’s popup stack.
 - While any queued modal is pending, **About** and **Preferences** in the window’s system menu are **greyed out** so it is obvious that dialogs are being handled in sequence.
 
+## Screenshots
+
+Live view with each backend tab selected. Tab counts reflect devices detected on the machine used for the capture.
+
+|  |  |
+| --- | --- |
+| <img src="assets/screenshots/screenshot-xinput.png" width="420" alt="MultiPad Tester with the XInput tab selected, showing two connected Xbox controllers." /> | <img src="assets/screenshots/screenshot-rawinput.png" width="420" alt="MultiPad Tester with the Raw Input tab selected, showing four controllers." /> |
+| XInput | Raw Input |
+| <img src="assets/screenshots/screenshot-directinput.png" width="420" alt="MultiPad Tester with the DirectInput tab selected, showing four controllers." /> | <img src="assets/screenshots/screenshot-hidapi.png" width="420" alt="MultiPad Tester with the HIDAPI tab selected, showing four controllers." /> |
+| DirectInput | HIDAPI |
+| <img src="assets/screenshots/screenshot-wgi.png" width="420" alt="MultiPad Tester with the Windows.Gaming.Input tab selected, showing four controllers." /> | <img src="assets/screenshots/screenshot-gameinput.png" width="420" alt="MultiPad Tester with the GameInput tab selected, showing four controllers." /> |
+| Windows.Gaming.Input | GameInput |
+
 ## Limitations / Known Gaps
 
 - Windows only. Linux and macOS are not supported.
