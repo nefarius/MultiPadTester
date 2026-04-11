@@ -32,10 +32,10 @@ static const LayoutCoords XBOX_LAYOUT = {
 	275.f, 85.f,   // face buttons
 	125.f, 85.f,   // left stick upper-left
 	252.f, 158.f,  // right stick
-	72.f, 32.f, 162.f, 50.f,   // left bumper
-	238.f, 32.f, 328.f, 50.f,  // right bumper
-	58.f, 10.f, 88.f, 36.f,    // left trigger
-	312.f, 10.f, 342.f, 36.f,  // right trigger
+	83.f, 33.f, 151.f, 47.f,    // left bumper (smaller)
+	249.f, 33.f, 317.f, 47.f,   // right bumper
+	34.f, 108.f, 46.f, 248.f,   // left trigger: slim, tall, on left grip
+	354.f, 108.f, 366.f, 248.f, // right trigger: mirror on right grip
 	182.f, 88.f, 200.f, 100.f, 218.f, 88.f,
 	"A", "B", "X", "Y",
 	"Back", "Guide", "Start"
@@ -52,10 +52,10 @@ static const LayoutCoords SONY_LAYOUT = {
 	285.f, 96.f,   // face buttons
 	160.f, 130.f,   // left stick lower-left (Sony symmetrical)
 	240.f, 130.f,  // right stick
-	72.f, 32.f, 162.f, 50.f,
-	238.f, 32.f, 328.f, 50.f,
-	58.f, 10.f, 88.f, 36.f,
-	312.f, 10.f, 342.f, 36.f,
+	83.f, 33.f, 151.f, 47.f,
+	249.f, 33.f, 317.f, 47.f,
+	34.f, 108.f, 46.f, 248.f,
+	354.f, 108.f, 366.f, 248.f,
 	182.f, 88.f, 200.f, 100.f, 218.f, 88.f,
 	SONY_FACE_A, SONY_FACE_B, SONY_FACE_X, SONY_FACE_Y,
 	"Share", "PS", "Options"
@@ -235,12 +235,14 @@ static void DrawBumper(ImDrawList* dl, const Layout& L,
 
 static void DrawTrigger(ImDrawList* dl, const Layout& L,
                         ImVec2 tl, ImVec2 br, float value) {
-    float rnd = L.S(4);
+    float w = br.x - tl.x;
+    float h = br.y - tl.y;
+    float rnd = std::min(L.S(4.f), 0.5f * std::min(w, h));
     dl->AddRectFilled(tl, br, IM_COL32(35, 35, 38, 255), rnd);
     dl->AddRect(tl, br, Outline(), rnd, 0, L.S(1.5f));
 
     if (value > 0.01f) {
-        float fillH = (br.y - tl.y) * value;
+        float fillH = h * value;
         ImVec2 ftl(tl.x, br.y - fillH);
         dl->AddRectFilled(ftl, br, IM_COL32(100, 200, 255, 220), rnd);
     }
