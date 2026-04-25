@@ -2,20 +2,18 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Gaming.Input.h>
-#include <array>
 #include <cstdint>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace
 {
 	using namespace winrt;
 	using namespace Windows::Gaming::Input;
 	using namespace Windows::Foundation;
-
-	constexpr int kMaxSlots = 4;
 
 	/**
 	 * @brief Converts a WinRT GamepadButtons bitmask into the internal 16-bit button mask.
@@ -109,59 +107,64 @@ namespace
 struct WgiBackend::Impl
 {
 	mutable std::mutex mutex;
-	std::array<std::optional<Gamepad>, kMaxSlots> slotGamepads{};
-	GamepadState states[kMaxSlots]{};
-	std::array<std::string, kMaxSlots> slotDisplayNames;
-	std::array<uint16_t, kMaxSlots> slotVendorIds{};
-	std::array<uint16_t, kMaxSlots> slotProductIds{};
+	std::vector<std::optional<Gamepad>> slotGamepads;
+	std::vector<GamepadState> states;
+	std::vector<std::string> slotDisplayNames;
+	std::vector<uint16_t> slotVendorIds;
+	std::vector<uint16_t> slotProductIds;
 
 	event_token addedToken;
 	event_token removedToken;
 
 	/**
-	 * @brief Assigns a newly connected gamepad to the first available backend slot and records its metadata.
+	 * @brief Re-enumerate the system gamepad list and rebuild the slot arrays.
 	 *
-	 * If a free slot exists, stores the provided gamepad handle in that slot and populates the slot's
-	 * display name and vendor/product IDs. If all slots are occupied, the added gamepad is ignored.
-	 *
-	 * @param pad The gamepad that was added.
+	 * Must be called with mutex held.
 	 */
-	void OnGamepadAdded(const IInspectable&, const Gamepad& pad)
+	void ResyncFromSystemLocked()
 	{
-		std::lock_guard lock(mutex);
-		for (int i = 0; i < kMaxSlots; ++i)
+		auto gamepads = Gamepad::Gamepads();
+		const size_t count = static_cast<size_t>(gamepads.Size());
+
+		slotGamepads.assign(count, std::nullopt);
+		states.assign(count, GamepadState{});
+		slotDisplayNames.assign(count, std::string{});
+		slotVendorIds.assign(count, 0);
+		slotProductIds.assign(count, 0);
+
+		for (size_t i = 0; i < count; ++i)
 		{
-			if (!slotGamepads[i])
+			try
 			{
+				auto pad = gamepads.GetAt(static_cast<uint32_t>(i));
 				slotGamepads[i] = pad;
-				slotDisplayNames[i] = GetDisplayNameForGamepad(pad, i);
+				slotDisplayNames[i] = GetDisplayNameForGamepad(pad, static_cast<int>(i));
 				GetDeviceIdsForGamepad(pad, &slotVendorIds[i], &slotProductIds[i]);
+			}
+			catch (...)
+			{
+				// If enumeration fails mid-way, leave remaining entries as empty/default.
 				break;
 			}
 		}
 	}
 
 	/**
-	 * @brief Handles a gamepad removal event by clearing the corresponding slot.
-	 *
-	 * Searches the tracked slots for the given gamepad handle; when a match is found,
-	 * removes the stored handle and resets the slot's vendor and product IDs to zero.
-	 *
-	 * @param pad The gamepad that was removed.
+	 * @brief Handles a gamepad add event by re-syncing the system list.
 	 */
-	void OnGamepadRemoved(const IInspectable&, const Gamepad& pad)
+	void OnGamepadAdded(const IInspectable&, const Gamepad&)
 	{
 		std::lock_guard lock(mutex);
-		for (int i = 0; i < kMaxSlots; ++i)
-		{
-			if (slotGamepads[i] && slotGamepads[i] == pad)
-			{
-				slotGamepads[i].reset();
-				slotVendorIds[i] = 0;
-				slotProductIds[i] = 0;
-				break;
-			}
-		}
+		ResyncFromSystemLocked();
+	}
+
+	/**
+	 * @brief Handles a gamepad remove event by re-syncing the system list.
+	 */
+	void OnGamepadRemoved(const IInspectable&, const Gamepad&)
+	{
+		std::lock_guard lock(mutex);
+		ResyncFromSystemLocked();
 	}
 };
 
@@ -181,7 +184,7 @@ WgiBackend::~WgiBackend()
 /**
  * @brief Initialize the WinRT gamepad backend, enumerate currently connected gamepads, and subscribe to add/remove events.
  *
- * Initializes the WinRT apartment once per thread, acquires the internal mutex, populates up to kMaxSlots with already-connected gamepads (storing each slot's handle, display name, and vendor/product IDs), and registers handlers for future GamepadAdded and GamepadRemoved events, saving their subscription tokens.
+ * Initializes the WinRT apartment once per thread, acquires the internal mutex, populates slots with already-connected gamepads (storing each slot's handle, display name, and vendor/product IDs), and registers handlers for future GamepadAdded and GamepadRemoved events, saving their subscription tokens.
  *
  * @param hwnd Window handle provided for initialization context; currently accepted for API compatibility and not otherwise used.
  */
@@ -195,22 +198,7 @@ void WgiBackend::Init(HWND)
 	}
 
 	std::lock_guard lock(impl_->mutex);
-	// Enumerate already-connected gamepads (GetAt in loop avoids IVectorView::Size() auto return type issue with MSVC)
-	auto gamepads = Gamepad::Gamepads();
-	for (int i = 0; i < kMaxSlots; ++i)
-	{
-		try
-		{
-			auto pad = gamepads.GetAt(static_cast<uint32_t>(i));
-			impl_->slotGamepads[i] = pad;
-			impl_->slotDisplayNames[i] = GetDisplayNameForGamepad(pad, i);
-			GetDeviceIdsForGamepad(pad, &impl_->slotVendorIds[i], &impl_->slotProductIds[i]);
-		}
-		catch (const hresult_out_of_bounds&)
-		{
-			break;
-		}
-	}
+	impl_->ResyncFromSystemLocked();
 	impl_->addedToken = Gamepad::GamepadAdded([this](const IInspectable& s, const Gamepad& p)
 	{
 		impl_->OnGamepadAdded(s, p);
@@ -224,7 +212,8 @@ void WgiBackend::Init(HWND)
 void WgiBackend::Poll()
 {
 	std::lock_guard lock(impl_->mutex);
-	for (int i = 0; i < kMaxSlots; ++i)
+	const size_t count = impl_->states.size();
+	for (size_t i = 0; i < count; ++i)
 	{
 		auto& gs = impl_->states[i];
 		if (!impl_->slotGamepads[i])
@@ -251,14 +240,28 @@ void WgiBackend::Poll()
 	}
 }
 
-int WgiBackend::GetMaxSlots() const { return kMaxSlots; }
+int WgiBackend::GetMaxSlots() const
+{
+	std::lock_guard lock(impl_->mutex);
+	return static_cast<int>(impl_->states.size());
+}
 
 const GamepadState& WgiBackend::GetState(int slot) const
 {
 	static constexpr GamepadState empty{};
-	if (slot < 0 || slot >= kMaxSlots)
+	if (slot < 0)
 		return empty;
-	return impl_->states[slot];
+
+	std::lock_guard lock(impl_->mutex);
+	if (static_cast<size_t>(slot) >= impl_->states.size())
+		return empty;
+
+	// Return a stable reference even if slots resize on another thread.
+	thread_local std::vector<GamepadState> slotResultStates;
+	if (slotResultStates.size() < impl_->states.size())
+		slotResultStates.resize(impl_->states.size());
+	slotResultStates[static_cast<size_t>(slot)] = impl_->states[static_cast<size_t>(slot)];
+	return slotResultStates[static_cast<size_t>(slot)];
 }
 
 const char* WgiBackend::GetName() const { return Name; }
@@ -271,12 +274,15 @@ const char* WgiBackend::GetName() const { return Name; }
  */
 const char* WgiBackend::GetSlotDisplayName(int slot) const
 {
-	if (slot < 0 || slot >= kMaxSlots) return nullptr;
+	if (slot < 0) return nullptr;
 	std::lock_guard lock(impl_->mutex);
-	if (!impl_->slotGamepads[slot]) return nullptr;
-	thread_local std::array<std::string, kMaxSlots> slotResultBuffers;
-	slotResultBuffers[slot] = impl_->slotDisplayNames[slot];
-	return slotResultBuffers[slot].c_str();
+	if (static_cast<size_t>(slot) >= impl_->slotGamepads.size()) return nullptr;
+	if (!impl_->slotGamepads[static_cast<size_t>(slot)]) return nullptr;
+	thread_local std::vector<std::string> slotResultBuffers;
+	if (slotResultBuffers.size() < impl_->slotDisplayNames.size())
+		slotResultBuffers.resize(impl_->slotDisplayNames.size());
+	slotResultBuffers[static_cast<size_t>(slot)] = impl_->slotDisplayNames[static_cast<size_t>(slot)];
+	return slotResultBuffers[static_cast<size_t>(slot)].c_str();
 }
 
 /**
@@ -284,21 +290,27 @@ const char* WgiBackend::GetSlotDisplayName(int slot) const
  *
  * Writes the 16-bit vendor and product IDs for the gamepad in the given slot into the provided output pointers. If the slot index is out of range or no gamepad is present in that slot, `0` is written for each ID. Passing a `nullptr` for either output pointer suppresses writing that value.
  *
- * @param slot Slot index (0 .. kMaxSlots - 1) to query.
+ * @param slot Slot index to query.
  * @param vendorId Pointer that receives the vendor ID, or `nullptr` to ignore.
  * @param productId Pointer that receives the product ID, or `nullptr` to ignore.
  */
 void WgiBackend::GetSlotDeviceIds(int slot, uint16_t* vendorId, uint16_t* productId) const
 {
-	if (slot < 0 || slot >= kMaxSlots)
+	if (slot < 0)
 	{
 		if (vendorId) *vendorId = 0;
 		if (productId) *productId = 0;
 		return;
 	}
 	std::lock_guard lock(impl_->mutex);
-	uint16_t vid = impl_->slotGamepads[slot] ? impl_->slotVendorIds[slot] : 0;
-	uint16_t pid = impl_->slotGamepads[slot] ? impl_->slotProductIds[slot] : 0;
+	if (static_cast<size_t>(slot) >= impl_->slotGamepads.size())
+	{
+		if (vendorId) *vendorId = 0;
+		if (productId) *productId = 0;
+		return;
+	}
+	uint16_t vid = impl_->slotGamepads[static_cast<size_t>(slot)] ? impl_->slotVendorIds[static_cast<size_t>(slot)] : 0;
+	uint16_t pid = impl_->slotGamepads[static_cast<size_t>(slot)] ? impl_->slotProductIds[static_cast<size_t>(slot)] : 0;
 	if (vendorId) *vendorId = vid;
 	if (productId) *productId = pid;
 }
