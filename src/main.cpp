@@ -527,23 +527,22 @@ static void LogSwapChainStatus(const HRESULT hr)
 }
 
 /**
- * @brief Applies the saved refresh-rate preference after swap-chain creation.
+ * @brief Frame interval for the interactive render pace, in milliseconds.
  *
- * Creation itself uses 0/0. Flip-model swap chains reject a non-zero rate, so the
- * preference is applied afterwards and is not fatal when the mode change is declined.
+ * Uses the saved refresh-rate preference. Zero means the current monitor rate.
+ * The swap chain itself stays at 0/0; this only limits how often the loop wakes.
  */
-static void ApplyPreferredRefreshRate(const HWND hwnd)
+static DWORD PreferredFrameIntervalMs(const HWND hwnd)
 {
-	int num = 60;
-	int den = 1;
-	if (g_prefs.refreshRate == 0)
-		GetMonitorRefreshRate(hwnd, num, den);
-	else
-		num = g_prefs.refreshRate;
-
-	const HRESULT hr = g_d3d.SetRefreshRate(num, den);
-	if (FAILED(hr))
-		LogSwapChainStatus(hr);
+	int hz = g_prefs.refreshRate;
+	if (hz <= 0)
+	{
+		int den = 1;
+		GetMonitorRefreshRate(hwnd, hz, den);
+	}
+	if (hz < 1)
+		hz = 60;
+	return static_cast<DWORD>(std::max(1, 1000 / hz));
 }
 
 static bool AnyControllerConnected()
@@ -657,7 +656,6 @@ int APIENTRY wWinMain(
 		return 1;
 	}
 	g_imguiDx11Ready = true;
-	ApplyPreferredRefreshRate(hwnd);
 
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureXbox;
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureDualSense;
@@ -706,7 +704,6 @@ int APIENTRY wWinMain(
 		}
 		g_imguiDx11Ready = true;
 		loadControllerTextures();
-		ApplyPreferredRefreshRate(hwnd);
 		g_resizeWidth = 0;
 		g_resizeHeight = 0;
 		g_swapChainOccluded = false;
@@ -1140,14 +1137,6 @@ int APIENTRY wWinMain(
 					ImGui::Spacing();
 					if (ImGui::Button("OK", ImVec2(80, 0)))
 					{
-						int num = 60, den = 1;
-						if (editRefreshRate == 0)
-							GetMonitorRefreshRate(hwnd, num, den);
-						else
-							num = editRefreshRate;
-						const HRESULT refreshHr = g_d3d.SetRefreshRate(num, den);
-						if (FAILED(refreshHr))
-							LogSwapChainStatus(refreshHr);
 						g_prefs.refreshRate = editRefreshRate;
 						g_prefs.vsync = editVsync;
 						SaveConfig(g_prefs);
@@ -1204,7 +1193,8 @@ int APIENTRY wWinMain(
 				--g_framesToRender;
 			const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				Clock::now() - lastPresent).count();
-			timeoutMs = elapsedMs >= 16 ? 0 : static_cast<DWORD>(16 - elapsedMs);
+			const auto frameMs = static_cast<long long>(PreferredFrameIntervalMs(hwnd));
+			timeoutMs = elapsedMs >= frameMs ? 0 : static_cast<DWORD>(frameMs - elapsedMs);
 		}
 		else
 		{

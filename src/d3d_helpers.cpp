@@ -148,24 +148,3 @@ HRESULT D3DContext::Present(const bool vsync, const UINT flags) const
 		return E_FAIL;
 	return swapChain->Present(vsync ? 1u : 0u, flags);
 }
-
-HRESULT D3DContext::SetRefreshRate(const int numerator, const int denominator)
-{
-	if (!swapChain)
-		return E_FAIL;
-
-	DXGI_SWAP_CHAIN_DESC desc{};
-	const HRESULT descHr = swapChain->GetDesc(&desc);
-	if (FAILED(descHr))
-		return descHr;
-
-	DXGI_MODE_DESC mode{};
-	mode.Width = desc.BufferDesc.Width;
-	mode.Height = desc.BufferDesc.Height;
-	mode.RefreshRate.Numerator = static_cast<UINT>(numerator);
-	mode.RefreshRate.Denominator = static_cast<UINT>(denominator);
-	mode.Format = desc.BufferDesc.Format;
-	mode.ScanlineOrdering = desc.BufferDesc.ScanlineOrdering;
-	mode.Scaling = desc.BufferDesc.Scaling;
-	return swapChain->ResizeTarget(&mode);
-}
