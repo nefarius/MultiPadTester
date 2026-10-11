@@ -5,6 +5,7 @@
 #include <Windows.h>
 #include <Shellapi.h>
 #include <tchar.h>
+#include <chrono>
 #include <cstdint>
 #include <ctime>
 #include <algorithm>
@@ -234,6 +235,13 @@ static void GetMonitorRefreshRate(HWND hwnd, int& numerator, int& denominator)
 
 static D3DContext g_d3d;
 static std::vector<std::unique_ptr<IInputBackend>>* g_backends = nullptr;
+static bool g_minimized = false;
+static bool g_swapChainOccluded = false;
+static UINT g_resizeWidth = 0;
+static UINT g_resizeHeight = 0;
+// Extra frames after input so hover, clicks, and modal transitions settle.
+static int g_framesToRender = 0;
+static bool g_imguiDx11Ready = false;
 
 enum class SystemDialog : std::uint8_t
 {
@@ -455,8 +463,14 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 		return 0;
 	case WM_SIZE:
-		if (g_d3d.device && wParam != SIZE_MINIMIZED)
-			g_d3d.Resize(lParam);
+		if (wParam == SIZE_MINIMIZED)
+		{
+			g_minimized = true;
+			return 0;
+		}
+		g_minimized = false;
+		g_resizeWidth = LOWORD(lParam);
+		g_resizeHeight = HIWORD(lParam);
 		return 0;
 	case WM_SYSCOMMAND:
 		if ((wParam & 0xfff0) == IDM_ABOUT)
@@ -492,6 +506,61 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
+static bool IsDeviceLostHr(const HRESULT hr)
+{
+	return hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET;
+}
+
+static void LogSwapChainStatus(const HRESULT hr)
+{
+	if (hr == S_OK)
+		return;
+
+	static HRESULT lastLogged = S_OK;
+	if (hr == lastLogged)
+		return;
+	lastLogged = hr;
+
+	OutputDebugStringA(std::format(
+		"Swap chain Present/Resize failed: {:#010x}\n",
+		static_cast<unsigned>(hr)).c_str());
+}
+
+/**
+ * @brief Frame interval for the interactive render pace, in milliseconds.
+ *
+ * Uses the saved refresh-rate preference. Zero means the current monitor rate.
+ * The swap chain itself stays at 0/0; this only limits how often the loop wakes.
+ */
+static DWORD PreferredFrameIntervalMs(const HWND hwnd)
+{
+	int hz = g_prefs.refreshRate;
+	if (hz <= 0)
+	{
+		int den = 1;
+		GetMonitorRefreshRate(hwnd, hz, den);
+	}
+	if (hz < 1)
+		hz = 60;
+	return static_cast<DWORD>(std::max(1, 1000 / hz));
+}
+
+static bool AnyControllerConnected()
+{
+	if (!g_backends)
+		return false;
+
+	for (const auto& backend : *g_backends)
+	{
+		for (int slot = 0; slot < backend->GetMaxSlots(); ++slot)
+		{
+			if (backend->GetState(slot).connected)
+				return true;
+		}
+	}
+	return false;
+}
+
 /**
  * @brief Initialize application subsystems, run the main event/render loop, and perform shutdown.
  *
@@ -501,7 +570,7 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
  * @param hPrevInstance Reserved; typically unused.
  * @param lpCmdLine Command line for the application as a Unicode string.
  * @param nCmdShow Controls how the window is to be shown.
- * @return int `0` on normal exit, non-zero on initialization failure (for example, Direct3D creation failure).
+ * @return int `0` on normal exit, non-zero on initialization failure or when a lost D3D device cannot be recreated.
  */
 int APIENTRY wWinMain(
 	_In_ HINSTANCE hInstance,
@@ -544,7 +613,7 @@ int APIENTRY wWinMain(
 	AppendMenuW(sysMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(sysMenu, MF_STRING, IDM_ABOUT, L"About...");
 	AppendMenuW(sysMenu, MF_STRING, IDM_PREFERENCES, L"Preferences...");
-	if (!g_d3d.Create(hwnd, g_prefs.refreshRate))
+	if (!g_d3d.Create(hwnd))
 	{
 		g_d3d.Cleanup();
 		UnregisterClass(wc.lpszClassName, wc.hInstance);
@@ -569,12 +638,28 @@ int APIENTRY wWinMain(
 		io.Fonts->AddFontDefault(&fc);
 	}
 
-	ImGui_ImplWin32_Init(hwnd);
-	ImGui_ImplDX11_Init(g_d3d.device.get(), g_d3d.deviceCtx.get());
+	if (!ImGui_ImplWin32_Init(hwnd))
+	{
+		ImGui::DestroyContext();
+		g_d3d.Cleanup();
+		DestroyWindow(hwnd);
+		UnregisterClass(wc.lpszClassName, wc.hInstance);
+		return 1;
+	}
+	if (!ImGui_ImplDX11_Init(g_d3d.device.get(), g_d3d.deviceCtx.get()))
+	{
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext();
+		g_d3d.Cleanup();
+		DestroyWindow(hwnd);
+		UnregisterClass(wc.lpszClassName, wc.hInstance);
+		return 1;
+	}
+	g_imguiDx11Ready = true;
 
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureXbox;
 	wil::com_ptr<ID3D11ShaderResourceView> controllerTextureDualSense;
-	{
+	auto loadControllerTextures = [&]() {
 		auto loadBody = [&](int id) -> wil::com_ptr<ID3D11ShaderResourceView> {
 			HRSRC hrsrc = FindResourceW(hInstance, MAKEINTRESOURCEW(id), RT_RCDATA);
 			if (!hrsrc) return {};
@@ -587,7 +672,52 @@ int APIENTRY wWinMain(
 		};
 		controllerTextureXbox = loadBody(IDR_XBOX_BODY);
 		controllerTextureDualSense = loadBody(IDR_DUALSENSE_BODY);
-	}
+	};
+	loadControllerTextures();
+
+	auto recreateDevice = [&]() -> bool {
+		const HRESULT reason = g_d3d.device ? g_d3d.device->GetDeviceRemovedReason() : E_FAIL;
+		OutputDebugStringA(std::format(
+			"D3D device lost (GetDeviceRemovedReason={:#010x}), recreating\n",
+			static_cast<unsigned>(reason)).c_str());
+
+		controllerTextureXbox.reset();
+		controllerTextureDualSense.reset();
+		if (g_imguiDx11Ready)
+		{
+			ImGui_ImplDX11_Shutdown();
+			g_imguiDx11Ready = false;
+		}
+		g_d3d.Cleanup();
+
+		if (!g_d3d.Create(hwnd))
+		{
+			OutputDebugStringA("Failed to recreate D3D device after device loss\n");
+			return false;
+		}
+
+		if (!ImGui_ImplDX11_Init(g_d3d.device.get(), g_d3d.deviceCtx.get()))
+		{
+			OutputDebugStringA("ImGui_ImplDX11_Init failed after device recreation\n");
+			g_d3d.Cleanup();
+			return false;
+		}
+		g_imguiDx11Ready = true;
+		loadControllerTextures();
+		g_resizeWidth = 0;
+		g_resizeHeight = 0;
+		g_swapChainOccluded = false;
+		g_framesToRender = 3;
+		return true;
+	};
+
+	auto handleDeviceLost = [&](const HRESULT hr) -> bool {
+		LogSwapChainStatus(hr);
+		if (IsDeviceLostHr(hr))
+			return recreateDevice();
+		// S_OK and DXGI status codes (for example OCCLUDED) continue; other failures are fatal.
+		return SUCCEEDED(hr);
+	};
 
 	std::vector<std::unique_ptr<IInputBackend>> backends;
 	backends.push_back(std::make_unique<XInputBackend>());
@@ -622,13 +752,92 @@ int APIENTRY wWinMain(
 
 	constexpr float clearColor[4] = {0.06f, 0.06f, 0.07f, 1.0f};
 
-	MSG msg{};
-	while (msg.message != WM_QUIT)
+	using Clock = std::chrono::steady_clock;
+	auto lastPresent = Clock::now();
+	DWORD timeoutMs = 0;
+	int exitCode = 0;
+	bool done = false;
+	while (!done)
 	{
-		if (PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
+		// MWMO_INPUTAVAILABLE is required because PeekMessage marks messages as seen;
+		// without it a leftover QS_* bit would make the next wait return immediately.
+		const DWORD waitResult = MsgWaitForMultipleObjectsEx(
+			0, nullptr, timeoutMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+		if (waitResult == WAIT_FAILED)
+		{
+			OutputDebugStringA(std::format(
+				"MsgWaitForMultipleObjectsEx failed: {}\n", GetLastError()).c_str());
+			Sleep(10);
+		}
+
+		MSG msg{};
+		bool dispatched = false;
+		while (PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
 		{
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
+			dispatched = true;
+			if (msg.message == WM_QUIT)
+			{
+				done = true;
+				exitCode = static_cast<int>(msg.wParam);
+			}
+		}
+		if (dispatched)
+			g_framesToRender = 3;
+		if (done)
+			break;
+
+		if (g_minimized)
+		{
+			for (auto& b : backends)
+				b->Poll();
+			timeoutMs = 250;
+			continue;
+		}
+
+		// Legacy blt-model swap chains report occlusion; flip model uses g_minimized instead.
+		if (g_swapChainOccluded && g_d3d.swapChain)
+		{
+			const HRESULT testHr = g_d3d.Present(false, DXGI_PRESENT_TEST);
+			if (!handleDeviceLost(testHr))
+			{
+				PostQuitMessage(1);
+				timeoutMs = 0;
+				continue;
+			}
+			if (testHr == DXGI_STATUS_OCCLUDED)
+			{
+				for (auto& b : backends)
+					b->Poll();
+				timeoutMs = 250;
+				continue;
+			}
+		}
+		g_swapChainOccluded = false;
+
+		if (g_resizeWidth != 0 || g_resizeHeight != 0)
+		{
+			const UINT width = g_resizeWidth;
+			const UINT height = g_resizeHeight;
+			g_resizeWidth = 0;
+			g_resizeHeight = 0;
+			if (width != 0 && height != 0 && g_d3d.swapChain)
+			{
+				const HRESULT resizeHr = g_d3d.Resize(width, height);
+				if (!handleDeviceLost(resizeHr))
+				{
+					PostQuitMessage(1);
+					timeoutMs = 0;
+					continue;
+				}
+			}
+		}
+
+		if (!g_d3d.rtv || !g_d3d.deviceCtx)
+		{
+			PostQuitMessage(1);
+			timeoutMs = 0;
 			continue;
 		}
 
@@ -928,12 +1137,6 @@ int APIENTRY wWinMain(
 					ImGui::Spacing();
 					if (ImGui::Button("OK", ImVec2(80, 0)))
 					{
-						int num = 60, den = 1;
-						if (editRefreshRate == 0)
-							GetMonitorRefreshRate(hwnd, num, den);
-						else
-							num = editRefreshRate;
-						g_d3d.SetRefreshRate(num, den);
 						g_prefs.refreshRate = editRefreshRate;
 						g_prefs.vsync = editVsync;
 						SaveConfig(g_prefs);
@@ -964,7 +1167,39 @@ int APIENTRY wWinMain(
 		g_d3d.deviceCtx->OMSetRenderTargets(1, &rtv, nullptr);
 		g_d3d.deviceCtx->ClearRenderTargetView(rtv, clearColor);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-		g_d3d.Present(g_prefs.vsync);
+		const HRESULT presentHr = g_d3d.Present(g_prefs.vsync);
+		lastPresent = Clock::now();
+		if (!handleDeviceLost(presentHr))
+		{
+			PostQuitMessage(1);
+			timeoutMs = 0;
+			continue;
+		}
+		if (IsDeviceLostHr(presentHr))
+		{
+			timeoutMs = 0;
+			continue;
+		}
+		g_swapChainOccluded = (presentHr == DXGI_STATUS_OCCLUDED);
+
+		const bool controllersConnected = AnyControllerConnected();
+		if (g_minimized || g_swapChainOccluded)
+		{
+			timeoutMs = 250;
+		}
+		else if (g_framesToRender > 0 || controllersConnected)
+		{
+			if (g_framesToRender > 0)
+				--g_framesToRender;
+			const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				Clock::now() - lastPresent).count();
+			const auto frameMs = static_cast<long long>(PreferredFrameIntervalMs(hwnd));
+			timeoutMs = elapsedMs >= frameMs ? 0 : static_cast<DWORD>(frameMs - elapsedMs);
+		}
+		else
+		{
+			timeoutMs = 100;
+		}
 	}
 
 	g_updateCheckSession.reset();
@@ -972,12 +1207,16 @@ int APIENTRY wWinMain(
 
 	g_backends = nullptr;
 
-	ImGui_ImplDX11_Shutdown();
+	controllerTextureXbox.reset();
+	controllerTextureDualSense.reset();
+	if (g_imguiDx11Ready)
+		ImGui_ImplDX11_Shutdown();
+	g_imguiDx11Ready = false;
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 	g_d3d.Cleanup();
 	DestroyWindow(hwnd);
 	UnregisterClass(wc.lpszClassName, wc.hInstance);
 
-	return 0;
+	return exitCode;
 }

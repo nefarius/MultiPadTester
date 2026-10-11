@@ -10,11 +10,12 @@ struct D3DContext
 	wil::com_ptr<IDXGISwapChain> swapChain;
 	wil::com_ptr<ID3D11RenderTargetView> rtv;
 
-	[[nodiscard]] bool Create(HWND hwnd, int refreshRatePreferred = 60);
-	void CreateRTV();
+	// Windowed creation uses refresh 0/0 so flip-model swap chains are accepted.
+	[[nodiscard]] bool Create(HWND hwnd);
+	[[nodiscard]] HRESULT CreateRTV();
 	void CleanupRTV();
 	void Cleanup();
-	void Resize(LPARAM lParam);
-	void Present(bool vsync) const;
-	void SetRefreshRate(int numerator, int denominator);
+	[[nodiscard]] HRESULT Resize(UINT width, UINT height);
+	// flags may be DXGI_PRESENT_TEST; pass vsync false for that test.
+	[[nodiscard]] HRESULT Present(bool vsync, UINT flags = 0) const;
 };
