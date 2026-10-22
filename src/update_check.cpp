@@ -12,13 +12,15 @@
 #include <thread>
 
 static constexpr wchar_t kDownloadUrl[] =
-	L"https://buildbot.nefarius.at/builds/MultiPadTester/latest/MultiPadTester.zip";
+	L"https://github.com/nefarius/MultiPadTester/releases/latest/download/MultiPadTester.zip";
 
 namespace
 {
-constexpr wchar_t kJsonHost[] = L"buildbot.nefarius.at";
-constexpr wchar_t kJsonPath[] =
-	L"/builds/MultiPadTester/latest/.MultiPadTester/.MultiPadTester.exe.json";
+constexpr wchar_t kReleaseHost[] = L"api.github.com";
+constexpr wchar_t kReleasePath[] = L"/repos/nefarius/MultiPadTester/releases/latest";
+constexpr wchar_t kReleaseHeaders[] =
+	L"Accept: application/vnd.github+json\r\n"
+	L"X-GitHub-Api-Version: 2022-11-28\r\n";
 constexpr DWORD kResolveMs = 10'000;
 constexpr DWORD kConnectMs = 10'000;
 constexpr DWORD kSendMs = 30'000;
@@ -124,10 +126,16 @@ bool GetLocalExeVersion(VersionQuad& quad, std::string& displayUtf8)
 	return true;
 }
 
-bool ExtractJsonFileVersion(std::string_view json, std::string& outVer)
+std::string NormalizeReleaseTag(std::string_view tag)
+{
+	if (!tag.empty() && (tag.front() == 'v' || tag.front() == 'V'))
+		tag.remove_prefix(1);
+	return std::string(tag);
+}
+
+bool ExtractJsonStringField(std::string_view json, std::string_view key, std::string& outVer)
 {
 	outVer.clear();
-	const std::string_view key = "\"FileVersion\"";
 	const size_t pos = json.find(key);
 	if (pos == std::string_view::npos)
 		return false;
@@ -151,7 +159,13 @@ bool ExtractJsonFileVersion(std::string_view json, std::string& outVer)
 	return !outVer.empty();
 }
 
-bool HttpGetUtf8(std::stop_token st, const wchar_t* host, INTERNET_PORT port, const wchar_t* path, std::string& bodyOut)
+bool HttpGetUtf8(
+	std::stop_token st,
+	const wchar_t* host,
+	INTERNET_PORT port,
+	const wchar_t* path,
+	const wchar_t* headers,
+	std::string& bodyOut)
 {
 	bodyOut.clear();
 	if (st.stop_requested())
@@ -191,8 +205,8 @@ bool HttpGetUtf8(std::stop_token st, const wchar_t* host, INTERNET_PORT port, co
 
 	const BOOL sent = WinHttpSendRequest(
 		hRequest,
-		WINHTTP_NO_ADDITIONAL_HEADERS,
-		0,
+		headers ? headers : WINHTTP_NO_ADDITIONAL_HEADERS,
+		headers ? static_cast<DWORD>(-1) : 0,
 		WINHTTP_NO_REQUEST_DATA,
 		0,
 		0,
@@ -281,19 +295,21 @@ void RunUpdateCheck(
 		return;
 
 	std::string json;
-	if (!HttpGetUtf8(st, kJsonHost, INTERNET_DEFAULT_HTTPS_PORT, kJsonPath, json))
+	if (!HttpGetUtf8(st, kReleaseHost, INTERNET_DEFAULT_HTTPS_PORT, kReleasePath, kReleaseHeaders, json))
 		return;
 
 	if (st.stop_requested())
 		return;
 
-	std::string remoteVerStr;
-	if (!ExtractJsonFileVersion(json, remoteVerStr))
+	std::string tag;
+	if (!ExtractJsonStringField(json, "\"tag_name\"", tag))
 		return;
 
+	const std::string remoteVerStr = NormalizeReleaseTag(tag);
 	VersionQuad remote{};
 	if (!ParseVersionString(remoteVerStr, remote))
 		return;
+	std::string remoteDisplay = std::format("{}.{}.{}.{}", remote.a, remote.b, remote.c, remote.d);
 
 	VersionQuad local{};
 	std::string localDisplay;
@@ -316,7 +332,7 @@ void RunUpdateCheck(
 	{
 		std::lock_guard lock(g_resultMutex);
 		g_pendingLocal = std::move(localDisplay);
-		g_pendingRemote = std::move(remoteVerStr);
+		g_pendingRemote = std::move(remoteDisplay);
 		g_havePending = true;
 	}
 

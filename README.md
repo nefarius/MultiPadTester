@@ -23,7 +23,7 @@ It polls multiple input APIs in parallel and renders one live gamepad view per d
 - Backend-local device counts to compare API coverage on the same hardware.
 - Persistent UI settings stored in `%APPDATA%\MultiPadTester\config.ini`.
 - **Fast startup:** HidHide status and Zadig/libwdi USB class probes run on **background threads** after the window is shown (similar to the optional update check), so the first frame is not blocked on device enumeration.
-- **Optional update check:** compares the running EXE version to the latest build metadata (HTTPS); you can open the download or dismiss for 24 hours. Dismissal is stored in config.
+- **Optional update check:** compares the running EXE version to the latest published GitHub Release (HTTPS); you can open the download or dismiss for 24 hours. Dismissal is stored in config.
 - **Modal queue:** system notices (HidHide active/blocked, Zadig driver matches, update available) and **About** / **Preferences** use a **single ordered queue**—only one modal is shown at a time, in a stable priority order, so multiple conditions never fight in Dear ImGui’s popup stack.
 - While any queued modal is pending, **About** and **Preferences** in the window’s system menu are **greyed out** so it is obvious that dialogs are being handled in sequence.
 
@@ -64,7 +64,7 @@ Unsupported targets include non-Windows hosts and ARM builds.
 
 ## Installation / Quick Start
 
-1. Download the latest prebuilt archive: **[MultiPadTester.zip](https://buildbot.nefarius.at/builds/MultiPadTester/latest/MultiPadTester.zip)**.
+1. Download the latest signed GitHub Release: **[MultiPadTester.zip](https://github.com/nefarius/MultiPadTester/releases/latest/download/MultiPadTester.zip)**.
 2. Extract the ZIP to any writable folder.
 3. Run `MultiPadTester.exe`.
 4. If you need the GameInput backend, install the [GameInput redistributable](https://aka.ms/gameinput).
