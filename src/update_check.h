@@ -34,5 +34,5 @@ private:
 /** Call from the main thread when handling WM_UPDATE_CHECK_READY; copies version strings for the UI. */
 bool UpdateCheck_PopResultForUi(std::string& localVersionOut, std::string& remoteVersionOut);
 
-/** HTTPS URL of the latest portable ZIP (build artifact); single source of truth with the update checker. */
+/** HTTPS URL of the latest published GitHub Release ZIP; single source of truth with the update checker. */
 const wchar_t* UpdateCheck_GetLatestDownloadUrlW();

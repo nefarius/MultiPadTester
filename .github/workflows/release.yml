@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and sign
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      DOTNET_NOLOGO: "true"
+      SIGN_RELAY_SERVER: ${{ vars.SIGN_RELAY_SERVER }}
+      SIGN_RELAY_CI_TOKEN: ${{ secrets.SIGN_RELAY_CI_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Require signing configuration
+        shell: pwsh
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+          if (-not $env:SIGN_RELAY_SERVER) { throw 'Repository variable SIGN_RELAY_SERVER is not set.' }
+          if (-not $env:SIGN_RELAY_CI_TOKEN) { throw 'Repository secret SIGN_RELAY_CI_TOKEN is not set.' }
+          if (-not $env:WEBHOOK_URL) { throw 'Repository secret WEBHOOK_URL is not set.' }
+
+      - name: Install vpatch
+        run: dotnet tool install --global Nefarius.Tools.Vpatch
+
+      - name: Stamp version in resource file
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $semverPattern = '^v?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$'
+          if ($tag -notmatch $semverPattern) {
+            Write-Error "Tag '$tag' does not match semantic version pattern (e.g. v1.2.3 or v1.2.3-rc1). Expected: ^v?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$"
+            exit 1
+          }
+          $major = $Matches[1]
+          $minor = $Matches[2]
+          $patch = $Matches[3]
+          $versionNumeric = "$major.$minor.$patch.0"
+          vpatch --stamp-version $versionNumeric --target-file "res\app.rc" --resource.file-version --resource.product-version
+
+      - name: Bootstrap vcpkg
+        run: vcpkg/bootstrap-vcpkg.bat
+
+      - name: Configure
+        run: cmake --preset default
+
+      - name: Build Release
+        run: cmake --build --preset release
+
+      - name: Require unsigned executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $pwd 'build\Release\MultiPadTester.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw "Executable was not produced: $exe" }
+          $sig = Get-AuthenticodeSignature -LiteralPath $exe
+          if ($sig.Status -ne 'NotSigned') {
+            throw "Expected unsigned $exe but Get-AuthenticodeSignature returned $($sig.Status)."
+          }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Sign executable
+        uses: nefarius/SignRelay@5a3ae05497dda0f8f582d3715324155168dddbca
+        with:
+          server: ${{ env.SIGN_RELAY_SERVER }}
+          token: ${{ env.SIGN_RELAY_CI_TOKEN }}
+          in-place: true
+          files: build/Release/MultiPadTester.exe
+
+      - name: Verify signature and package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $pwd 'build\Release\MultiPadTester.exe'
+          $sig = Get-AuthenticodeSignature -LiteralPath $exe
+          if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate) {
+            throw "Executable is not validly signed: $exe (Status=$($sig.Status))."
+          }
+          Write-Output "Signed: $exe (Subject=$($sig.SignerCertificate.Subject))"
+
+          $zip = Join-Path $pwd 'MultiPadTester.zip'
+          if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
+          tar -a -c -f $zip -C (Join-Path $pwd 'build\Release') MultiPadTester.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $entries = @(tar -tf $zip)
+          if ($entries.Count -ne 1 -or $entries[0] -ne 'MultiPadTester.exe') {
+            throw "Unexpected archive contents: $($entries -join ', ')"
+          }
+
+      - name: Upload signed executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}
+          path: build/Release/MultiPadTester.exe
+          if-no-files-found: error
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultiPadTester-release
+          path: MultiPadTester.zip
+          if-no-files-found: error
+
+      - name: Mirror to Buildbot
+        # nefarius/AppVeyorArtifactsReceiver@b9b7a29499e6f7286aabaf939a765e0a09527079 (feat/skip-zip-extraction)
+        uses: nefarius/AppVeyorArtifactsReceiver@b9b7a29499e6f7286aabaf939a765e0a09527079
+        with:
+          webhook-url: ${{ secrets.WEBHOOK_URL }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          artifact-name: ${{ github.event.repository.name }}
+          skip-zip-extraction: true
+
+  draft-release:
+    name: Create draft release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: Download signed archive
+        uses: actions/download-artifact@v4
+        with:
+          name: MultiPadTester-release
+          path: release
+
+      - name: Create draft GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          archive="release/MultiPadTester.zip"
+          test -f "$archive"
+          tag="${GITHUB_REF_NAME}"
+          args=(release create "$tag" "$archive" --draft --generate-notes --title "$tag")
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+- ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"
+          {
+            echo "Opened a draft release for \`$tag\`."
+            echo
+            echo "Review the signed archive, then publish the GitHub Release."
+          } >> "$GITHUB_STEP_SUMMARY"
