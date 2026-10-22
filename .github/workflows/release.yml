@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# One release run per tag at a time; a duplicate tag push must not race the first run.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build and sign
@@ -158,6 +163,41 @@ jobs:
           archive="release/MultiPadTester.zip"
           test -f "$archive"
           tag="${GITHUB_REF_NAME}"
+
+          # Draft releases are not found by tag, so list them; never open a second release for a tag.
+          export TAG="$tag"
+          existing="$(gh api "repos/${GH_REPO}/releases" --paginate \
+            --jq '.[] | select(.tag_name == $ENV.TAG) | .id' | tr '\n' ' ')"
+          if [[ -n "${existing// /}" ]]; then
+            release_id="${existing%% *}"
+            is_draft="$(gh api "repos/${GH_REPO}/releases/${release_id}" --jq '.draft')"
+            if [[ "$is_draft" != "true" ]]; then
+              echo "A published release for \`$tag\` already exists (id $release_id); leaving it unchanged." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            has_archive="$(gh api "repos/${GH_REPO}/releases/${release_id}" \
+              --jq '[.assets[] | select(.name == "MultiPadTester.zip" and .state == "uploaded")] | length > 0')"
+            if [[ "$has_archive" == "true" ]]; then
+              echo "A draft release for \`$tag\` already exists (id $release_id) with MultiPadTester.zip; not creating another." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            # An earlier run created the draft but never finished attaching the archive.
+            # Remove any incomplete upload of the same name, then upload it again.
+            stale_ids="$(gh api "repos/${GH_REPO}/releases/${release_id}" \
+              --jq '.assets[] | select(.name == "MultiPadTester.zip" and .state != "uploaded") | .id')"
+            for asset_id in $stale_ids; do
+              gh api --method DELETE "repos/${GH_REPO}/releases/assets/${asset_id}"
+            done
+            gh api --method POST \
+              -H "Content-Type: application/zip" \
+              --input "$archive" \
+              "https://uploads.github.com/repos/${GH_REPO}/releases/${release_id}/assets?name=MultiPadTester.zip" > /dev/null
+            echo "Uploaded the missing MultiPadTester.zip to the existing release for \`$tag\` (id $release_id)." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           args=(release create "$tag" "$archive" --draft --generate-notes --title "$tag")
           if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+- ]]; then
             args+=(--prerelease)
