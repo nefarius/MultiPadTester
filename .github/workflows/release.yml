@@ -123,8 +123,8 @@ jobs:
           if-no-files-found: error
 
       - name: Mirror to Buildbot
-        # nefarius/AppVeyorArtifactsReceiver@b9b7a29499e6f7286aabaf939a765e0a09527079 (feat/skip-zip-extraction)
-        uses: nefarius/AppVeyorArtifactsReceiver@b9b7a29499e6f7286aabaf939a765e0a09527079
+        # nefarius/AppVeyorArtifactsReceiver@dac4a8c48ecf2e6d1c1837c7bc6aaf66e8f54cde (master, PR #143)
+        uses: nefarius/AppVeyorArtifactsReceiver@dac4a8c48ecf2e6d1c1837c7bc6aaf66e8f54cde
         with:
           webhook-url: ${{ secrets.WEBHOOK_URL }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
