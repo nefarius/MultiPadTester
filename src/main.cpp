@@ -239,8 +239,6 @@ static bool g_minimized = false;
 static bool g_swapChainOccluded = false;
 static UINT g_resizeWidth = 0;
 static UINT g_resizeHeight = 0;
-// Extra frames after input so hover, clicks, and modal transitions settle.
-static int g_framesToRender = 0;
 static bool g_imguiDx11Ready = false;
 
 enum class SystemDialog : std::uint8_t
@@ -527,12 +525,12 @@ static void LogSwapChainStatus(const HRESULT hr)
 }
 
 /**
- * @brief Frame interval for the interactive render pace, in milliseconds.
+ * @brief Constant presentation interval while the window is visible.
  *
  * Uses the saved refresh-rate preference. Zero means the current monitor rate.
- * The swap chain itself stays at 0/0; this only limits how often the loop wakes.
+ * The swap chain itself stays at 0/0; this only schedules Present calls.
  */
-static DWORD PreferredFrameIntervalMs(const HWND hwnd)
+static std::chrono::nanoseconds PreferredFrameInterval(const HWND hwnd)
 {
 	int hz = g_prefs.refreshRate;
 	if (hz <= 0)
@@ -542,23 +540,35 @@ static DWORD PreferredFrameIntervalMs(const HWND hwnd)
 	}
 	if (hz < 1)
 		hz = 60;
-	return static_cast<DWORD>(std::max(1, 1000 / hz));
+	return std::chrono::round<std::chrono::nanoseconds>(
+		std::chrono::duration<double>{1.0 / static_cast<double>(hz)});
 }
 
-static bool AnyControllerConnected()
+/**
+ * @brief Next absolute presentation time after a frame that became due at @p due.
+ *
+ * Time spent rendering or blocked in Present counts toward the interval. A refresh
+ * change uses the new interval from the current frame when that deadline is still
+ * ahead. A stall of at least two intervals starts again after the present so missed
+ * slots cannot turn into a burst.
+ */
+static std::chrono::steady_clock::time_point NextPresentDeadline(
+	const std::chrono::steady_clock::time_point due,
+	const std::chrono::steady_clock::time_point presented,
+	const std::chrono::nanoseconds interval,
+	const bool vsync,
+	const bool rateChanged)
 {
-	if (!g_backends)
-		return false;
-
-	for (const auto& backend : *g_backends)
+	if (rateChanged)
 	{
-		for (int slot = 0; slot < backend->GetMaxSlots(); ++slot)
-		{
-			if (backend->GetState(slot).connected)
-				return true;
-		}
+		const auto rebased = due + interval;
+		return presented <= rebased ? rebased : presented + interval;
 	}
-	return false;
+	if (presented < due + interval)
+		return due + interval;
+	if (vsync && presented < due + interval * 2)
+		return presented;
+	return presented + interval;
 }
 
 /**
@@ -675,6 +685,12 @@ int APIENTRY wWinMain(
 	};
 	loadControllerTextures();
 
+	using Clock = std::chrono::steady_clock;
+	int pacingRefreshRate = g_prefs.refreshRate;
+	auto pacingInterval = PreferredFrameInterval(hwnd);
+	auto nextPresent = Clock::now();
+	bool rebaseFrameDeadline = true;
+
 	auto recreateDevice = [&]() -> bool {
 		const HRESULT reason = g_d3d.device ? g_d3d.device->GetDeviceRemovedReason() : E_FAIL;
 		OutputDebugStringA(std::format(
@@ -707,7 +723,7 @@ int APIENTRY wWinMain(
 		g_resizeWidth = 0;
 		g_resizeHeight = 0;
 		g_swapChainOccluded = false;
-		g_framesToRender = 3;
+		rebaseFrameDeadline = true;
 		return true;
 	};
 
@@ -752,13 +768,22 @@ int APIENTRY wWinMain(
 
 	constexpr float clearColor[4] = {0.06f, 0.06f, 0.07f, 1.0f};
 
-	using Clock = std::chrono::steady_clock;
-	auto lastPresent = Clock::now();
-	DWORD timeoutMs = 0;
 	int exitCode = 0;
 	bool done = false;
 	while (!done)
 	{
+		DWORD timeoutMs;
+		if (g_minimized || g_swapChainOccluded)
+			timeoutMs = 250;
+		else if (rebaseFrameDeadline || Clock::now() >= nextPresent)
+			timeoutMs = 0;
+		else
+		{
+			const auto remaining = std::chrono::ceil<std::chrono::milliseconds>(
+				nextPresent - Clock::now()).count();
+			timeoutMs = static_cast<DWORD>(std::min<long long>(std::max<long long>(remaining, 1), 1000));
+		}
+
 		// MWMO_INPUTAVAILABLE is required because PeekMessage marks messages as seen;
 		// without it a leftover QS_* bit would make the next wait return immediately.
 		const DWORD waitResult = MsgWaitForMultipleObjectsEx(
@@ -771,20 +796,16 @@ int APIENTRY wWinMain(
 		}
 
 		MSG msg{};
-		bool dispatched = false;
 		while (PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
 		{
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
-			dispatched = true;
 			if (msg.message == WM_QUIT)
 			{
 				done = true;
 				exitCode = static_cast<int>(msg.wParam);
 			}
 		}
-		if (dispatched)
-			g_framesToRender = 3;
 		if (done)
 			break;
 
@@ -792,7 +813,7 @@ int APIENTRY wWinMain(
 		{
 			for (auto& b : backends)
 				b->Poll();
-			timeoutMs = 250;
+			rebaseFrameDeadline = true;
 			continue;
 		}
 
@@ -803,14 +824,13 @@ int APIENTRY wWinMain(
 			if (!handleDeviceLost(testHr))
 			{
 				PostQuitMessage(1);
-				timeoutMs = 0;
 				continue;
 			}
 			if (testHr == DXGI_STATUS_OCCLUDED)
 			{
 				for (auto& b : backends)
 					b->Poll();
-				timeoutMs = 250;
+				rebaseFrameDeadline = true;
 				continue;
 			}
 		}
@@ -828,7 +848,6 @@ int APIENTRY wWinMain(
 				if (!handleDeviceLost(resizeHr))
 				{
 					PostQuitMessage(1);
-					timeoutMs = 0;
 					continue;
 				}
 			}
@@ -837,9 +856,16 @@ int APIENTRY wWinMain(
 		if (!g_d3d.rtv || !g_d3d.deviceCtx)
 		{
 			PostQuitMessage(1);
-			timeoutMs = 0;
 			continue;
 		}
+
+		// Messages can wake the loop early. Present only on the deadline so input
+		// and window traffic cannot change the frame cadence.
+		if (rebaseFrameDeadline)
+			nextPresent = Clock::now();
+		else if (Clock::now() < nextPresent)
+			continue;
+		const auto frameDue = nextPresent;
 
 		// Poll all backends
 		for (auto& b : backends)
@@ -1168,38 +1194,27 @@ int APIENTRY wWinMain(
 		g_d3d.deviceCtx->ClearRenderTargetView(rtv, clearColor);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		const HRESULT presentHr = g_d3d.Present(g_prefs.vsync);
-		lastPresent = Clock::now();
 		if (!handleDeviceLost(presentHr))
 		{
 			PostQuitMessage(1);
-			timeoutMs = 0;
 			continue;
 		}
 		if (IsDeviceLostHr(presentHr))
-		{
-			timeoutMs = 0;
 			continue;
-		}
 		g_swapChainOccluded = (presentHr == DXGI_STATUS_OCCLUDED);
-
-		const bool controllersConnected = AnyControllerConnected();
 		if (g_minimized || g_swapChainOccluded)
 		{
-			timeoutMs = 250;
+			rebaseFrameDeadline = true;
+			continue;
 		}
-		else if (g_framesToRender > 0 || controllersConnected)
-		{
-			if (g_framesToRender > 0)
-				--g_framesToRender;
-			const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-				Clock::now() - lastPresent).count();
-			const auto frameMs = static_cast<long long>(PreferredFrameIntervalMs(hwnd));
-			timeoutMs = elapsedMs >= frameMs ? 0 : static_cast<DWORD>(frameMs - elapsedMs);
-		}
-		else
-		{
-			timeoutMs = 100;
-		}
+
+		const auto presented = Clock::now();
+		const auto interval = PreferredFrameInterval(hwnd);
+		const bool rateChanged = g_prefs.refreshRate != pacingRefreshRate || interval != pacingInterval;
+		pacingRefreshRate = g_prefs.refreshRate;
+		pacingInterval = interval;
+		nextPresent = NextPresentDeadline(frameDue, presented, pacingInterval, g_prefs.vsync, rateChanged);
+		rebaseFrameDeadline = false;
 	}
 
 	g_updateCheckSession.reset();
