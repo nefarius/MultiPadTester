@@ -142,9 +142,9 @@ HRESULT D3DContext::Resize(const UINT width, const UINT height)
 	return CreateRTV();
 }
 
-HRESULT D3DContext::Present(const bool vsync, const UINT flags) const
+HRESULT D3DContext::Present(const bool vsync, const UINT flags, const UINT vsyncInterval) const
 {
 	if (!swapChain)
 		return E_FAIL;
-	return swapChain->Present(vsync ? 1u : 0u, flags);
+	return swapChain->Present(vsync ? vsyncInterval : 0u, flags);
 }

@@ -17,5 +17,6 @@ struct D3DContext
 	void Cleanup();
 	[[nodiscard]] HRESULT Resize(UINT width, UINT height);
 	// flags may be DXGI_PRESENT_TEST; pass vsync false for that test.
-	[[nodiscard]] HRESULT Present(bool vsync, UINT flags = 0) const;
+	// vsyncInterval is used only when vsync is true (1 = every refresh, 2 = every second refresh).
+	[[nodiscard]] HRESULT Present(bool vsync, UINT flags = 0, UINT vsyncInterval = 1) const;
 };
