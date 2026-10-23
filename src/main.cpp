@@ -36,6 +36,7 @@
 #include "resource.h"
 #include "startup_probe.h"
 #include "update_check.h"
+#include "render_diagnostics.h"
 
 #define IDM_ABOUT 0xF200
 #define IDM_PREFERENCES 0xF210
@@ -51,6 +52,7 @@ struct AppPrefs
 	int lastTabIndex = 0;  // backend tab index to restore on launch
 	/** UTC Unix seconds when the user dismissed the update dialog; 0 = never. Suppresses checks for 24h. */
 	int64_t updateDismissedUnix = 0;
+	bool renderDiagnostics = false;
 };
 
 /**
@@ -77,11 +79,12 @@ static std::wstring GetConfigPath()
  *
  * Reads the config file located in the application's AppData folder and applies recognized keys
  * from the [Settings] section into the provided AppPrefs structure. Supported keys:
- * RefreshRate, VSync, WindowX, WindowY, WindowW, WindowH, LastTabIndex, UpdateDismissedUnix.
+ * RefreshRate, VSync, WindowX, WindowY, WindowW, WindowH, LastTabIndex, UpdateDismissedUnix,
+ * RenderDiagnostics.
  *
  * - If the config file is missing or unreadable, the function leaves prefs unchanged.
  * - RefreshRate is accepted only if it equals 0, 60, 75, 120, or 144; other values are ignored.
- * - Boolean VSync accepts "1", "true", or "yes" as true.
+ * - Boolean VSync and RenderDiagnostics accept "1", "true", or "yes" as true.
  * - Integer parsing failures are ignored and do not modify the corresponding field.
  * - If the resulting WindowW or WindowH is less than or equal to zero, both are reset to 0.
  *
@@ -155,6 +158,10 @@ static void LoadConfig(AppPrefs& prefs)
 		{
 			try { prefs.updateDismissedUnix = std::stoll(val); } catch (...) {}
 		}
+		else if (key == "RenderDiagnostics")
+		{
+			prefs.renderDiagnostics = (val == "1" || val == "true" || val == "yes");
+		}
 	}
 	// Treat invalid dimensions as "not set"
 	if (prefs.windowW <= 0 || prefs.windowH <= 0)
@@ -173,6 +180,7 @@ static void LoadConfig(AppPrefs& prefs)
  *              - windowX, windowY, windowW, windowH: saved window position and size
  *              - lastTabIndex: backend tab index to restore on launch
  *              - updateDismissedUnix: UTC Unix time when update dialog was dismissed
+ *              - renderDiagnostics: whether rendering diagnostics capture is enabled
  */
 static void SaveConfig(const AppPrefs& prefs)
 {
@@ -191,6 +199,7 @@ static void SaveConfig(const AppPrefs& prefs)
 	f << "WindowH=" << prefs.windowH << "\n";
 	f << "LastTabIndex=" << prefs.lastTabIndex << "\n";
 	f << "UpdateDismissedUnix=" << prefs.updateDismissedUnix << "\n";
+	f << "RenderDiagnostics=" << (prefs.renderDiagnostics ? "1" : "0") << "\n";
 }
 
 /**
@@ -328,8 +337,8 @@ static void SystemDialogMinSize(SystemDialog d, float& minW, float& minH)
 		minH = 100.f;
 		break;
 	case SystemDialog::Preferences:
-		minW = 320.f;
-		minH = 120.f;
+		minW = 460.f;
+		minH = 230.f;
 		break;
 	}
 }
@@ -571,6 +580,23 @@ static std::chrono::steady_clock::time_point NextPresentDeadline(
 	return presented + interval;
 }
 
+static bool StartRenderDiagnostics(const HWND hwnd)
+{
+	int monitorHz = 60;
+	int denominator = 1;
+	GetMonitorRefreshRate(hwnd, monitorHz, denominator);
+	const auto intervalUs = std::chrono::duration_cast<std::chrono::microseconds>(
+		PreferredFrameInterval(hwnd)).count();
+	return RenderDiagnostics_Start(
+		hwnd,
+		g_d3d.device.get(),
+		g_d3d.swapChain.get(),
+		g_prefs.refreshRate,
+		g_prefs.vsync,
+		monitorHz,
+		intervalUs);
+}
+
 /**
  * @brief Initialize application subsystems, run the main event/render loop, and perform shutdown.
  *
@@ -724,6 +750,7 @@ int APIENTRY wWinMain(
 		g_resizeHeight = 0;
 		g_swapChainOccluded = false;
 		rebaseFrameDeadline = true;
+		RenderDiagnostics_NoteDeviceRecreated(g_d3d.device.get(), g_d3d.swapChain.get());
 		return true;
 	};
 
@@ -750,6 +777,11 @@ int APIENTRY wWinMain(
 
 	ShowWindow(hwnd, nCmdShow);
 	UpdateWindow(hwnd);
+	if (g_prefs.renderDiagnostics && !StartRenderDiagnostics(hwnd))
+	{
+		g_prefs.renderDiagnostics = false;
+		SaveConfig(g_prefs);
+	}
 
 	try
 	{
@@ -814,8 +846,10 @@ int APIENTRY wWinMain(
 			for (auto& b : backends)
 				b->Poll();
 			rebaseFrameDeadline = true;
+			RenderDiagnostics_SetMinimized(true);
 			continue;
 		}
+		RenderDiagnostics_SetMinimized(false);
 
 		// Legacy blt-model swap chains report occlusion; flip model uses g_minimized instead.
 		if (g_swapChainOccluded && g_d3d.swapChain)
@@ -831,9 +865,11 @@ int APIENTRY wWinMain(
 				for (auto& b : backends)
 					b->Poll();
 				rebaseFrameDeadline = true;
+				RenderDiagnostics_SetOccluded(true);
 				continue;
 			}
 		}
+		RenderDiagnostics_SetOccluded(false);
 		g_swapChainOccluded = false;
 
 		if (g_resizeWidth != 0 || g_resizeHeight != 0)
@@ -864,8 +900,13 @@ int APIENTRY wWinMain(
 		if (rebaseFrameDeadline)
 			nextPresent = Clock::now();
 		else if (Clock::now() < nextPresent)
+		{
+			RenderDiagnostics_NoteEarlyWakeup();
 			continue;
+		}
 		const auto frameDue = nextPresent;
+		const auto renderStart = Clock::now();
+		RenderDiagnostics_BeginFrame(frameDue, renderStart);
 
 		// Poll all backends
 		for (auto& b : backends)
@@ -1140,10 +1181,12 @@ int APIENTRY wWinMain(
 				{
 					static int editRefreshRate = 60;
 					static bool editVsync = true;
+					static bool editDiagnostics = false;
 					if (ImGui::IsWindowAppearing())
 					{
 						editRefreshRate = g_prefs.refreshRate;
 						editVsync = g_prefs.vsync;
+						editDiagnostics = g_prefs.renderDiagnostics;
 					}
 					int monitorNum = 60, monitorDen = 1;
 					GetMonitorRefreshRate(hwnd, monitorNum, monitorDen);
@@ -1161,10 +1204,30 @@ int APIENTRY wWinMain(
 							(idx == 0 ? 0 : idx == 1 ? 60 : idx == 2 ? 75 : idx == 3 ? 120 : 144);
 					ImGui::Checkbox("VSync", &editVsync);
 					ImGui::Spacing();
+					ImGui::Checkbox("Capture rendering diagnostics", &editDiagnostics);
+					ImGui::TextWrapped(
+						"Records frame timing in the diagnostics folder. Turn this off or exit the app to finish the files.");
+					if (ImGui::Button("Open diagnostics folder"))
+						RenderDiagnostics_OpenFolder();
+					ImGui::Spacing();
 					if (ImGui::Button("OK", ImVec2(80, 0)))
 					{
 						g_prefs.refreshRate = editRefreshRate;
 						g_prefs.vsync = editVsync;
+						if (editDiagnostics)
+						{
+							if (!RenderDiagnostics_IsRecording())
+								editDiagnostics = StartRenderDiagnostics(hwnd);
+							else
+							{
+								const auto intervalUs = std::chrono::duration_cast<std::chrono::microseconds>(
+									PreferredFrameInterval(hwnd)).count();
+								RenderDiagnostics_NoteSettings(g_prefs.refreshRate, g_prefs.vsync, intervalUs);
+							}
+						}
+						else if (RenderDiagnostics_IsRecording())
+							RenderDiagnostics_Stop();
+						g_prefs.renderDiagnostics = editDiagnostics;
 						SaveConfig(g_prefs);
 						dismissSystemDialog();
 					}
@@ -1193,30 +1256,45 @@ int APIENTRY wWinMain(
 		g_d3d.deviceCtx->OMSetRenderTargets(1, &rtv, nullptr);
 		g_d3d.deviceCtx->ClearRenderTargetView(rtv, clearColor);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+		const auto presentStart = Clock::now();
 		const HRESULT presentHr = g_d3d.Present(g_prefs.vsync);
+		const auto presentEnd = Clock::now();
+		if (IsDeviceLostHr(presentHr))
+		{
+			RenderDiagnostics_NotePresent(
+				presentHr, presentStart, presentEnd, presentEnd, g_d3d.swapChain.get());
+			if (!handleDeviceLost(presentHr))
+				PostQuitMessage(1);
+			continue;
+		}
 		if (!handleDeviceLost(presentHr))
 		{
+			RenderDiagnostics_NotePresent(
+				presentHr, presentStart, presentEnd, presentEnd, g_d3d.swapChain.get());
 			PostQuitMessage(1);
 			continue;
 		}
-		if (IsDeviceLostHr(presentHr))
-			continue;
 		g_swapChainOccluded = (presentHr == DXGI_STATUS_OCCLUDED);
 		if (g_minimized || g_swapChainOccluded)
 		{
 			rebaseFrameDeadline = true;
+			RenderDiagnostics_NotePresent(presentHr, presentStart, presentEnd, presentEnd, g_d3d.swapChain.get());
+			RenderDiagnostics_SetOccluded(g_swapChainOccluded);
+			RenderDiagnostics_SetMinimized(g_minimized);
 			continue;
 		}
 
-		const auto presented = Clock::now();
+		const auto presented = presentEnd;
 		const auto interval = PreferredFrameInterval(hwnd);
 		const bool rateChanged = g_prefs.refreshRate != pacingRefreshRate || interval != pacingInterval;
 		pacingRefreshRate = g_prefs.refreshRate;
 		pacingInterval = interval;
 		nextPresent = NextPresentDeadline(frameDue, presented, pacingInterval, g_prefs.vsync, rateChanged);
 		rebaseFrameDeadline = false;
+		RenderDiagnostics_NotePresent(presentHr, presentStart, presentEnd, nextPresent, g_d3d.swapChain.get());
 	}
 
+	RenderDiagnostics_Stop();
 	g_updateCheckSession.reset();
 	StartupProbeSession_ShutdownAsync(std::move(g_startupProbeSession));
 
