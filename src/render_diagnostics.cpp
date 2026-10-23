@@ -260,6 +260,7 @@ bool RenderDiagnostics_Start(
 	IDXGISwapChain* swapChain,
 	const int configuredRefreshHz,
 	const bool vsync,
+	const int vsyncInterval,
 	const int monitorRefreshHz,
 	const int64_t scheduledIntervalUs)
 {
@@ -295,6 +296,7 @@ bool RenderDiagnostics_Start(
 		"configured_refresh_hz={}\n"
 		"monitor_refresh_hz={}\n"
 		"vsync={}\n"
+		"vsync_interval={}\n"
 		"scheduled_interval_us={}\n"
 		"qpc_sample=immediately_after_present\n"
 		"steady_clock_us=microseconds_since_capture_start\n",
@@ -305,6 +307,7 @@ bool RenderDiagnostics_Start(
 		configuredRefreshHz,
 		monitorRefreshHz,
 		vsync ? 1 : 0,
+		vsyncInterval,
 		scheduledIntervalUs);
 	g_capture.metadata += WindowMetadata(hwnd);
 	g_capture.metadata += AdapterMetadata(device);
@@ -437,14 +440,17 @@ void RenderDiagnostics_NotePresent(
 void RenderDiagnostics_NoteSettings(
 	const int configuredRefreshHz,
 	const bool vsync,
+	const int vsyncInterval,
 	const int64_t scheduledIntervalUs)
 {
-	NoteEvent(std::format("settings refresh={} vsync={} interval_us={}", configuredRefreshHz, vsync ? 1 : 0, scheduledIntervalUs));
+	NoteEvent(std::format(
+		"settings refresh={} vsync={} vsync_interval={} interval_us={}",
+		configuredRefreshHz, vsync ? 1 : 0, vsyncInterval, scheduledIntervalUs));
 	if (!g_capture.recording)
 		return;
 	g_capture.metadata += std::format(
-		"settings_changed_qpc_us={} configured_refresh_hz={} vsync={} scheduled_interval_us={}\n",
-		QpcNowUs(), configuredRefreshHz, vsync ? 1 : 0, scheduledIntervalUs);
+		"settings_changed_qpc_us={} configured_refresh_hz={} vsync={} vsync_interval={} scheduled_interval_us={}\n",
+		QpcNowUs(), configuredRefreshHz, vsync ? 1 : 0, vsyncInterval, scheduledIntervalUs);
 }
 
 void RenderDiagnostics_SetMinimized(const bool minimized)

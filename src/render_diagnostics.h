@@ -17,6 +17,7 @@
 	IDXGISwapChain* swapChain,
 	int configuredRefreshHz,
 	bool vsync,
+	int vsyncInterval,
 	int monitorRefreshHz,
 	int64_t scheduledIntervalUs);
 
@@ -32,7 +33,8 @@ void RenderDiagnostics_NotePresent(
 	std::chrono::steady_clock::time_point presentEnd,
 	std::chrono::steady_clock::time_point nextDeadline,
 	IDXGISwapChain* swapChain);
-void RenderDiagnostics_NoteSettings(int configuredRefreshHz, bool vsync, int64_t scheduledIntervalUs);
+void RenderDiagnostics_NoteSettings(
+	int configuredRefreshHz, bool vsync, int vsyncInterval, int64_t scheduledIntervalUs);
 void RenderDiagnostics_SetMinimized(bool minimized);
 void RenderDiagnostics_SetOccluded(bool occluded);
 void RenderDiagnostics_NoteDeviceRecreated(ID3D11Device* device, IDXGISwapChain* swapChain);

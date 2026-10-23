@@ -2,6 +2,10 @@
 
 Use this capture when a display flickers or changes refresh while MultiPad Tester is open. It records when the application calls DirectX `Present`. It does not record the refresh rate the monitor actually uses. Pair it with PresentMon to see that second half.
 
+## Quick workaround to try first
+
+Some NVIDIA drivers engage G-SYNC for this window and follow its present rate, which can look like flicker. In **Preferences**, turn on **Avoid variable refresh rate (G-SYNC/FreeSync)**. It needs VSync and presents every second refresh, so a 60 Hz display runs at 30 FPS and a 144 Hz display at 72 FPS. Tell us whether the flicker stops. The text file records the setting as `vsync_interval`, so a capture taken with it on and off can be compared.
+
 ## Capture a session
 
 1. Open **Preferences** from the window's system menu.

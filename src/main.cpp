@@ -45,6 +45,8 @@ struct AppPrefs
 {
 	int refreshRate = 60;  // 0 = monitor default
 	bool vsync = true;
+	/** Present every second refresh while VSync is on so drivers do not engage G-SYNC/VRR for this window. */
+	bool avoidVrr = false;
 	int windowX = 0;
 	int windowY = 0;
 	int windowW = 0;  // 0 = use default position/size
@@ -79,12 +81,12 @@ static std::wstring GetConfigPath()
  *
  * Reads the config file located in the application's AppData folder and applies recognized keys
  * from the [Settings] section into the provided AppPrefs structure. Supported keys:
- * RefreshRate, VSync, WindowX, WindowY, WindowW, WindowH, LastTabIndex, UpdateDismissedUnix,
- * RenderDiagnostics.
+ * RefreshRate, VSync, AvoidVrr, WindowX, WindowY, WindowW, WindowH, LastTabIndex,
+ * UpdateDismissedUnix, RenderDiagnostics.
  *
  * - If the config file is missing or unreadable, the function leaves prefs unchanged.
  * - RefreshRate is accepted only if it equals 0, 60, 75, 120, or 144; other values are ignored.
- * - Boolean VSync and RenderDiagnostics accept "1", "true", or "yes" as true.
+ * - Boolean VSync, AvoidVrr, and RenderDiagnostics accept "1", "true", or "yes" as true.
  * - Integer parsing failures are ignored and do not modify the corresponding field.
  * - If the resulting WindowW or WindowH is less than or equal to zero, both are reset to 0.
  *
@@ -134,6 +136,10 @@ static void LoadConfig(AppPrefs& prefs)
 		{
 			prefs.vsync = (val == "1" || val == "true" || val == "yes");
 		}
+		else if (key == "AvoidVrr")
+		{
+			prefs.avoidVrr = (val == "1" || val == "true" || val == "yes");
+		}
 		else if (key == "WindowX")
 		{
 			try { prefs.windowX = std::stoi(val); } catch (...) {}
@@ -177,6 +183,7 @@ static void LoadConfig(AppPrefs& prefs)
  * @param prefs Preference values to persist. The following fields are written:
  *              - refreshRate: monitor refresh rate selection (0 means monitor default)
  *              - vsync: vertical sync enabled flag
+ *              - avoidVrr: present every second refresh while VSync is on
  *              - windowX, windowY, windowW, windowH: saved window position and size
  *              - lastTabIndex: backend tab index to restore on launch
  *              - updateDismissedUnix: UTC Unix time when update dialog was dismissed
@@ -193,6 +200,7 @@ static void SaveConfig(const AppPrefs& prefs)
 	f << "[Settings]\n";
 	f << "RefreshRate=" << prefs.refreshRate << "\n";
 	f << "VSync=" << (prefs.vsync ? "1" : "0") << "\n";
+	f << "AvoidVrr=" << (prefs.avoidVrr ? "1" : "0") << "\n";
 	f << "WindowX=" << prefs.windowX << "\n";
 	f << "WindowY=" << prefs.windowY << "\n";
 	f << "WindowW=" << prefs.windowW << "\n";
@@ -338,7 +346,7 @@ static void SystemDialogMinSize(SystemDialog d, float& minW, float& minH)
 		break;
 	case SystemDialog::Preferences:
 		minW = 460.f;
-		minH = 230.f;
+		minH = 300.f;
 		break;
 	}
 }
@@ -580,6 +588,12 @@ static std::chrono::steady_clock::time_point NextPresentDeadline(
 	return presented + interval;
 }
 
+/** Sync interval passed to Present while VSync is on; 2 keeps drivers from engaging VRR. */
+static UINT PreferredVsyncInterval()
+{
+	return g_prefs.avoidVrr ? 2u : 1u;
+}
+
 static bool StartRenderDiagnostics(const HWND hwnd)
 {
 	int monitorHz = 60;
@@ -593,6 +607,7 @@ static bool StartRenderDiagnostics(const HWND hwnd)
 		g_d3d.swapChain.get(),
 		g_prefs.refreshRate,
 		g_prefs.vsync,
+		static_cast<int>(PreferredVsyncInterval()),
 		monitorHz,
 		intervalUs);
 }
@@ -1181,11 +1196,13 @@ int APIENTRY wWinMain(
 				{
 					static int editRefreshRate = 60;
 					static bool editVsync = true;
+					static bool editAvoidVrr = false;
 					static bool editDiagnostics = false;
 					if (ImGui::IsWindowAppearing())
 					{
 						editRefreshRate = g_prefs.refreshRate;
 						editVsync = g_prefs.vsync;
+						editAvoidVrr = g_prefs.avoidVrr;
 						editDiagnostics = g_prefs.renderDiagnostics;
 					}
 					int monitorNum = 60, monitorDen = 1;
@@ -1203,6 +1220,11 @@ int APIENTRY wWinMain(
 						editRefreshRate =
 							(idx == 0 ? 0 : idx == 1 ? 60 : idx == 2 ? 75 : idx == 3 ? 120 : 144);
 					ImGui::Checkbox("VSync", &editVsync);
+					ImGui::BeginDisabled(!editVsync);
+					ImGui::Checkbox("Avoid variable refresh rate (G-SYNC/FreeSync)", &editAvoidVrr);
+					ImGui::EndDisabled();
+					ImGui::TextWrapped(
+						"Try this if the display flickers. It presents every second refresh, so a 60 Hz display runs at 30 FPS. Requires VSync.");
 					ImGui::Spacing();
 					ImGui::Checkbox("Capture rendering diagnostics", &editDiagnostics);
 					ImGui::TextWrapped(
@@ -1214,6 +1236,7 @@ int APIENTRY wWinMain(
 					{
 						g_prefs.refreshRate = editRefreshRate;
 						g_prefs.vsync = editVsync;
+						g_prefs.avoidVrr = editAvoidVrr;
 						if (editDiagnostics)
 						{
 							if (!RenderDiagnostics_IsRecording())
@@ -1222,7 +1245,9 @@ int APIENTRY wWinMain(
 							{
 								const auto intervalUs = std::chrono::duration_cast<std::chrono::microseconds>(
 									PreferredFrameInterval(hwnd)).count();
-								RenderDiagnostics_NoteSettings(g_prefs.refreshRate, g_prefs.vsync, intervalUs);
+								RenderDiagnostics_NoteSettings(
+									g_prefs.refreshRate, g_prefs.vsync,
+									static_cast<int>(PreferredVsyncInterval()), intervalUs);
 							}
 						}
 						else if (RenderDiagnostics_IsRecording())
@@ -1257,7 +1282,7 @@ int APIENTRY wWinMain(
 		g_d3d.deviceCtx->ClearRenderTargetView(rtv, clearColor);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		const auto presentStart = Clock::now();
-		const HRESULT presentHr = g_d3d.Present(g_prefs.vsync);
+		const HRESULT presentHr = g_d3d.Present(g_prefs.vsync, 0, PreferredVsyncInterval());
 		const auto presentEnd = Clock::now();
 		if (IsDeviceLostHr(presentHr))
 		{

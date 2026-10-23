@@ -72,7 +72,7 @@ Unsupported targets include non-Windows hosts and ARM builds.
 ### Configuration
 
 - **Path:** `%APPDATA%\MultiPadTester\config.ini` (created on first launch).
-- **Stored values:** refresh rate, VSync, last window position/size, last selected backend tab, last time the update-available dialog was dismissed (UTC Unix seconds, used to suppress update checks for 24 hours).
+- **Stored values:** refresh rate, VSync, the optional "avoid variable refresh rate" setting, rendering diagnostics capture, last window position/size, last selected backend tab, last time the update-available dialog was dismissed (UTC Unix seconds, used to suppress update checks for 24 hours).
 
 ## Build from Source
 
