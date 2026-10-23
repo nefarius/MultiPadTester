@@ -2,6 +2,7 @@
 
 #include "diagnostic_csv.h"
 
+#include <Shellapi.h>
 #include <wil/com.h>
 #include <winver.h>
 
