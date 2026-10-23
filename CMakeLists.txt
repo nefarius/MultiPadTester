@@ -40,6 +40,7 @@ target_link_libraries(MultiPadTester PRIVATE
     runtimeobject.lib
     winhttp.lib
     version.lib
+    winmm.lib
 )
 
 target_compile_definitions(MultiPadTester PRIVATE

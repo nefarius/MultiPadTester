@@ -19,7 +19,8 @@
 	bool vsync,
 	int vsyncInterval,
 	int monitorRefreshHz,
-	int64_t scheduledIntervalUs);
+	int64_t scheduledIntervalUs,
+	const char* frameTimerMode);
 
 void RenderDiagnostics_Stop();
 void RenderDiagnostics_OpenFolder();
