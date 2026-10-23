@@ -37,6 +37,7 @@
 #include "startup_probe.h"
 #include "update_check.h"
 #include "render_diagnostics.h"
+#include "frame_timer.h"
 
 #define IDM_ABOUT 0xF200
 #define IDM_PREFERENCES 0xF210
@@ -594,7 +595,7 @@ static UINT PreferredVsyncInterval()
 	return g_prefs.avoidVrr ? 2u : 1u;
 }
 
-static bool StartRenderDiagnostics(const HWND hwnd)
+static bool StartRenderDiagnostics(const HWND hwnd, const char* frameTimerMode)
 {
 	int monitorHz = 60;
 	int denominator = 1;
@@ -609,7 +610,8 @@ static bool StartRenderDiagnostics(const HWND hwnd)
 		g_prefs.vsync,
 		static_cast<int>(PreferredVsyncInterval()),
 		monitorHz,
-		intervalUs);
+		intervalUs,
+		frameTimerMode);
 }
 
 /**
@@ -792,7 +794,8 @@ int APIENTRY wWinMain(
 
 	ShowWindow(hwnd, nCmdShow);
 	UpdateWindow(hwnd);
-	if (g_prefs.renderDiagnostics && !StartRenderDiagnostics(hwnd))
+	FrameTimer frameTimer;
+	if (g_prefs.renderDiagnostics && !StartRenderDiagnostics(hwnd, frameTimer.ModeName()))
 	{
 		g_prefs.renderDiagnostics = false;
 		SaveConfig(g_prefs);
@@ -819,11 +822,24 @@ int APIENTRY wWinMain(
 	bool done = false;
 	while (!done)
 	{
-		DWORD timeoutMs;
+		DWORD timeoutMs = INFINITE;
+		HANDLE timerHandle = nullptr;
+		DWORD timerCount = 0;
 		if (g_minimized || g_swapChainOccluded)
+		{
+			frameTimer.Cancel();
 			timeoutMs = 250;
+		}
 		else if (rebaseFrameDeadline || Clock::now() >= nextPresent)
+		{
+			frameTimer.Cancel();
 			timeoutMs = 0;
+		}
+		else if (frameTimer.ArmUntil(nextPresent))
+		{
+			timerHandle = frameTimer.Handle();
+			timerCount = 1;
+		}
 		else
 		{
 			const auto remaining = std::chrono::ceil<std::chrono::milliseconds>(
@@ -834,7 +850,7 @@ int APIENTRY wWinMain(
 		// MWMO_INPUTAVAILABLE is required because PeekMessage marks messages as seen;
 		// without it a leftover QS_* bit would make the next wait return immediately.
 		const DWORD waitResult = MsgWaitForMultipleObjectsEx(
-			0, nullptr, timeoutMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+			timerCount, timerCount ? &timerHandle : nullptr, timeoutMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 		if (waitResult == WAIT_FAILED)
 		{
 			OutputDebugStringA(std::format(
@@ -1240,7 +1256,7 @@ int APIENTRY wWinMain(
 						if (editDiagnostics)
 						{
 							if (!RenderDiagnostics_IsRecording())
-								editDiagnostics = StartRenderDiagnostics(hwnd);
+								editDiagnostics = StartRenderDiagnostics(hwnd, frameTimer.ModeName());
 							else
 							{
 								const auto intervalUs = std::chrono::duration_cast<std::chrono::microseconds>(

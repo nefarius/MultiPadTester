@@ -263,7 +263,8 @@ bool RenderDiagnostics_Start(
 	const bool vsync,
 	const int vsyncInterval,
 	const int monitorRefreshHz,
-	const int64_t scheduledIntervalUs)
+	const int64_t scheduledIntervalUs,
+	const char* frameTimerMode)
 {
 	if (g_capture.recording)
 		RenderDiagnostics_Stop();
@@ -299,6 +300,7 @@ bool RenderDiagnostics_Start(
 		"vsync={}\n"
 		"vsync_interval={}\n"
 		"scheduled_interval_us={}\n"
+		"frame_timer={}\n"
 		"qpc_sample=immediately_after_present\n"
 		"steady_clock_us=microseconds_since_capture_start\n",
 		utcTm.tm_year + 1900, utcTm.tm_mon + 1, utcTm.tm_mday,
@@ -309,7 +311,8 @@ bool RenderDiagnostics_Start(
 		monitorRefreshHz,
 		vsync ? 1 : 0,
 		vsyncInterval,
-		scheduledIntervalUs);
+		scheduledIntervalUs,
+		frameTimerMode && frameTimerMode[0] ? frameTimerMode : "unknown");
 	g_capture.metadata += WindowMetadata(hwnd);
 	g_capture.metadata += AdapterMetadata(device);
 	g_capture.metadata += SwapChainMetadata(swapChain);

@@ -4,7 +4,7 @@ Use this capture when a display flickers or changes refresh while MultiPad Teste
 
 ## Quick workaround to try first
 
-Some NVIDIA drivers engage G-SYNC for this window and follow its present rate, which can look like flicker. In **Preferences**, turn on **Avoid variable refresh rate (G-SYNC/FreeSync)**. It needs VSync and presents every second refresh, so a 60 Hz display runs at 30 FPS and a 144 Hz display at 72 FPS. Tell us whether the flicker stops. The text file records the setting as `vsync_interval`, so a capture taken with it on and off can be compared.
+Some NVIDIA drivers engage G-SYNC for this window and follow its present rate, which can look like flicker. In **Preferences**, turn on **Avoid variable refresh rate (G-SYNC/FreeSync)**. It needs VSync and presents every second refresh, so a 60 Hz display runs at 30 FPS and a 144 Hz display at 72 FPS. Tell us whether the flicker stops. The text file records the setting as `vsync_interval` and the wait used as `frame_timer` (`high_resolution_timer` or `timer_resolution_1ms`). Compare a capture with the previous one: with avoid-VRR on, most refresh-count steps should be 2 and the flicker should stay gone; with it off, present spacing should tighten toward the selected refresh.
 
 ## Capture a session
 
